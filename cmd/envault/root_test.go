@@ -30,7 +30,7 @@ func TestRootCommandsRegistered(t *testing.T) {
 }
 
 func TestStubCommandsReturnError(t *testing.T) {
-	stubs := []string{"key", "import", "add", "list", "push", "pull", "run", "hook"}
+	stubs := []string{"import", "add", "list", "push", "pull", "run", "hook"}
 	for _, name := range stubs {
 		t.Run(name, func(t *testing.T) {
 			root := newRootCmd("dev")
@@ -48,14 +48,14 @@ func TestStubErrorContainsCommandNameAndReason(t *testing.T) {
 	root := newRootCmd("dev")
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"key"})
+	root.SetArgs([]string{"import"})
 
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error from stub command")
 	}
-	if !strings.Contains(err.Error(), "key") {
-		t.Errorf("error = %q, want command name 'key'", err.Error())
+	if !strings.Contains(err.Error(), "import") {
+		t.Errorf("error = %q, want command name 'import'", err.Error())
 	}
 	if !strings.Contains(err.Error(), "not implemented") {
 		t.Errorf("error = %q, want 'not implemented'", err.Error())
@@ -67,7 +67,7 @@ func TestRootSilencesErrorOutput(t *testing.T) {
 	root := newRootCmd("dev")
 	root.SetOut(io.Discard)
 	root.SetErr(&errBuf)
-	root.SetArgs([]string{"key"})
+	root.SetArgs([]string{"import"})
 	_ = root.Execute()
 
 	// Cobra should not print the error itself (SilenceErrors: true)
