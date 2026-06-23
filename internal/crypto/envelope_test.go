@@ -197,3 +197,34 @@ func TestSeal_NoRecipients(t *testing.T) {
 		t.Fatal("Seal with no recipients should return error")
 	}
 }
+
+func TestSeal_NonceUniqueness(t *testing.T) {
+	_, pub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+
+	const iterations = 200
+	payloadNonces := make(map[string]struct{}, iterations)
+	wrapNonces := make(map[string]struct{}, iterations)
+	payload := []byte("repeated payload")
+
+	for i := range iterations {
+		env, err := Seal(payload, []PublicKey{pub}, AES256GCM)
+		if err != nil {
+			t.Fatalf("Seal %d: %v", i, err)
+		}
+
+		pKey := string(env.Nonce)
+		if _, dup := payloadNonces[pKey]; dup {
+			t.Fatalf("duplicate payload nonce at iteration %d: %x", i, env.Nonce)
+		}
+		payloadNonces[pKey] = struct{}{}
+
+		wKey := string(env.Recipients[0].Nonce)
+		if _, dup := wrapNonces[wKey]; dup {
+			t.Fatalf("duplicate wrap nonce at iteration %d: %x", i, env.Recipients[0].Nonce)
+		}
+		wrapNonces[wKey] = struct{}{}
+	}
+}
