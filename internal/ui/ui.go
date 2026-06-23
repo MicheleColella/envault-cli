@@ -29,25 +29,11 @@ func colorize(code, s string) string {
 	return code + s + ansiReset
 }
 
-func OK(msg string) {
-	fmt.Fprintln(Out, colorize(ansiGreen, "✓")+" "+msg)
-}
-
-func Fail(msg string) {
-	fmt.Fprintln(Err, colorize(ansiRed, "✗")+" "+msg)
-}
-
-func Info(msg string) {
-	fmt.Fprintln(Out, colorize(ansiDim, "→")+" "+msg)
-}
-
-func Warn(msg string) {
-	fmt.Fprintln(Out, colorize(ansiYellow, "!")+" "+msg)
-}
-
-func Header(msg string) {
-	fmt.Fprintln(Out, colorize(ansiBold, msg))
-}
+func OK(msg string)     { _, _ = fmt.Fprintln(Out, colorize(ansiGreen, "✓")+" "+msg) }
+func Fail(msg string)   { _, _ = fmt.Fprintln(Err, colorize(ansiRed, "✗")+" "+msg) }
+func Info(msg string)   { _, _ = fmt.Fprintln(Out, colorize(ansiDim, "→")+" "+msg) }
+func Warn(msg string)   { _, _ = fmt.Fprintln(Out, colorize(ansiYellow, "!")+" "+msg) }
+func Header(msg string) { _, _ = fmt.Fprintln(Out, colorize(ansiBold, msg)) }
 
 func NotImplemented(name string) {
 	Fail(name + ": not implemented yet")

@@ -10,14 +10,18 @@ linters:
     - unused
     - misspell
     - gosec
-    - goimports
+  settings:
+    gosec:
+      excludes:
+        - G304  # file path from variable — intentional in a secrets CLI
 
-linters-settings:
-  gosec:
-    excludes:
-      - G304  # file path from variable — intentional in a secrets CLI
-  goimports:
-    local-prefixes: github.com/MicheleColella/envault-cli
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/MicheleColella/envault-cli
 
 issues:
   max-issues-per-linter: 0

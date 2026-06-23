@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MicheleColella/envault-cli/internal/ui"
 	"github.com/spf13/cobra"
+
+	"github.com/MicheleColella/envault-cli/internal/ui"
 )
 
 func Execute(ver string) {
