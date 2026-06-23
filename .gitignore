@@ -14,3 +14,8 @@ coverage.txt
 .env.*
 *.pem
 *.key
+
+# Test infrastructure (machine-specific, not versioned)
+.githooks/
+.test-tmp/
+test-results/
