@@ -18,7 +18,7 @@ func DetectOrigin(repoRoot string) (string, error) {
 		}
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var inOrigin bool
 	sc := bufio.NewScanner(f)
