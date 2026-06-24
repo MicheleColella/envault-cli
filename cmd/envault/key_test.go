@@ -457,6 +457,24 @@ func TestRunKeyDelete_NotFound(t *testing.T) {
 	}
 }
 
+func TestRunKeyImport_RejectsLowOrderKey(t *testing.T) {
+	root := initVaultRoot(t)
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	zeros := strings.Repeat("00", 32)
+	err := runKeyImport(root, "bob@example.com", zeros)
+	if err == nil {
+		t.Fatal("expected error for all-zero (low-order) public key")
+	}
+
+	rs, _ := vault.ListRecipients(root)
+	if len(rs) != 0 {
+		t.Errorf("low-order key must not enter recipients, got %d", len(rs))
+	}
+}
+
 func TestRunKeyImport_InvalidHex(t *testing.T) {
 	root := initVaultRoot(t)
 

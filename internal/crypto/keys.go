@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"io"
 
 	"golang.org/x/crypto/curve25519"
@@ -30,6 +31,23 @@ func GenerateKeyPair() (PrivateKey, PublicKey, error) {
 	var pubKey PublicKey
 	copy(pubKey[:], pub)
 	return priv, pubKey, nil
+}
+
+// ValidatePublicKey rejects X25519 public keys that cannot be used safely as a
+// recipient — in particular low-order points (such as the all-zero key), which
+// would produce an all-zero shared secret and make sealing impossible. It runs
+// a throwaway ECDH and reports the resulting error.
+func ValidatePublicKey(pub PublicKey) error {
+	scratch, _, err := GenerateKeyPair()
+	if err != nil {
+		return err
+	}
+	defer clear(scratch[:])
+
+	if _, err := curve25519.X25519(scratch[:], pub[:]); err != nil {
+		return fmt.Errorf("invalid X25519 public key: %w", err)
+	}
+	return nil
 }
 
 // DerivePublicKey computes the X25519 public key corresponding to priv.

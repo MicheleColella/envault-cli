@@ -196,6 +196,10 @@ func runKeyImport(repoRoot, id, hexPubKey string) error {
 		return fmt.Errorf("invalid public key: %w", err)
 	}
 
+	if err := envcrypto.ValidatePublicKey(envcrypto.PublicKey(r.PublicKey)); err != nil {
+		return fmt.Errorf("refusing to add %s: %w", id, err)
+	}
+
 	if err := vault.AddRecipient(repoRoot, r); err != nil {
 		if errors.Is(err, vault.ErrRecipientAlreadyExists) {
 			ui.Info(fmt.Sprintf("%s is already a recipient — skipped", id))

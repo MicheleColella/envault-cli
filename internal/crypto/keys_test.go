@@ -7,6 +7,24 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
+func TestValidatePublicKey_AcceptsGenerated(t *testing.T) {
+	_, pub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	if err := ValidatePublicKey(pub); err != nil {
+		t.Errorf("ValidatePublicKey rejected a valid key: %v", err)
+	}
+}
+
+func TestValidatePublicKey_RejectsLowOrderPoints(t *testing.T) {
+	// All-zero is the canonical low-order point; sealing to it is impossible.
+	var zero PublicKey
+	if err := ValidatePublicKey(zero); err == nil {
+		t.Error("ValidatePublicKey accepted the all-zero (low-order) key")
+	}
+}
+
 func TestGenerateKeyPair_UniqueKeys(t *testing.T) {
 	priv1, pub1, err := GenerateKeyPair()
 	if err != nil {
