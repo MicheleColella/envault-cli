@@ -19,3 +19,5 @@ coverage.txt
 .githooks/
 .test-tmp/
 test-results/
+.claude/
+CLAUDE.md
