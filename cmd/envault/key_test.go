@@ -379,7 +379,7 @@ func TestRunKeyImport_DuplicateIsSkipped(t *testing.T) {
 
 // ---- key delete ----
 
-func TestRunKeyDelete_RemovesKey(t *testing.T) {
+func TestRunKeyDelete_RemovesFromKeychain(t *testing.T) {
 	kc := newMemStore()
 
 	ui.Out = &bytes.Buffer{}
@@ -388,11 +388,57 @@ func TestRunKeyDelete_RemovesKey(t *testing.T) {
 	if err := runKeyNew("alice@example.com", kc, t.TempDir()); err != nil {
 		t.Fatalf("runKeyNew: %v", err)
 	}
-	if err := runKeyDelete("alice@example.com", kc); err != nil {
+	if err := runKeyDelete("alice@example.com", kc, t.TempDir(), false); err != nil {
 		t.Fatalf("runKeyDelete: %v", err)
 	}
 	if _, err := kc.Unseal("alice@example.com"); !errors.Is(err, keychain.ErrNotFound) {
 		t.Errorf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestRunKeyDelete_AlsoRemovesFromRecipients(t *testing.T) {
+	kc := newMemStore()
+	root := initVaultRoot(t)
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyNew("alice@example.com", kc, root); err != nil {
+		t.Fatalf("runKeyNew: %v", err)
+	}
+
+	rs, _ := vault.ListRecipients(root)
+	if len(rs) != 1 {
+		t.Fatalf("expected alice in recipients before delete, got %d", len(rs))
+	}
+
+	if err := runKeyDelete("alice@example.com", kc, root, false); err != nil {
+		t.Fatalf("runKeyDelete: %v", err)
+	}
+
+	rs, _ = vault.ListRecipients(root)
+	if len(rs) != 0 {
+		t.Errorf("expected 0 recipients after delete, got %d", len(rs))
+	}
+}
+
+func TestRunKeyDelete_KeepRecipientFlag(t *testing.T) {
+	kc := newMemStore()
+	root := initVaultRoot(t)
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyNew("alice@example.com", kc, root); err != nil {
+		t.Fatalf("runKeyNew: %v", err)
+	}
+	if err := runKeyDelete("alice@example.com", kc, root, true); err != nil {
+		t.Fatalf("runKeyDelete: %v", err)
+	}
+
+	rs, _ := vault.ListRecipients(root)
+	if len(rs) != 1 || rs[0].ID != "alice@example.com" {
+		t.Errorf("expected alice to remain in recipients with --keep-recipient, got %v", rs)
 	}
 }
 
@@ -402,7 +448,7 @@ func TestRunKeyDelete_NotFound(t *testing.T) {
 	ui.Out = &bytes.Buffer{}
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	err := runKeyDelete("nobody@example.com", kc)
+	err := runKeyDelete("nobody@example.com", kc, t.TempDir(), false)
 	if err == nil {
 		t.Fatal("expected error for non-existent key")
 	}

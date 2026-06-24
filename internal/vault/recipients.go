@@ -10,9 +10,13 @@ import (
 	"strings"
 )
 
+
 // ErrRecipientAlreadyExists is returned by AddRecipient when an entry with the
 // same ID is already present in the recipients file.
 var ErrRecipientAlreadyExists = errors.New("recipient already exists for this id")
+
+// ErrRecipientNotFound is returned by RemoveRecipient when no entry matches the given ID.
+var ErrRecipientNotFound = errors.New("recipient not found")
 
 // Recipient is a vault member identified by an ID and their X25519 public key.
 type Recipient struct {
@@ -83,6 +87,50 @@ func ListRecipients(repoRoot string) ([]Recipient, error) {
 		return nil, fmt.Errorf("scan recipients: %w", err)
 	}
 	return out, nil
+}
+
+// RemoveRecipient removes the entry with the given id from the recipients file.
+// Returns ErrRecipientNotFound if no entry matches.
+func RemoveRecipient(repoRoot, id string) error {
+	existing, err := ListRecipients(repoRoot)
+	if err != nil {
+		return err
+	}
+
+	found := false
+	kept := existing[:0:0] // same backing type but zero len/cap copy
+	for _, r := range existing {
+		if r.ID == id {
+			found = true
+		} else {
+			kept = append(kept, r)
+		}
+	}
+	if !found {
+		return fmt.Errorf("%w: %s", ErrRecipientNotFound, id)
+	}
+
+	return writeRecipients(repoRoot, kept)
+}
+
+// writeRecipients atomically replaces the recipients file with the given slice.
+func writeRecipients(repoRoot string, recipients []Recipient) error {
+	path := filepath.Join(repoRoot, DirName, recipientsFile)
+	tmpPath := path + ".tmp"
+
+	var buf strings.Builder
+	for _, r := range recipients {
+		buf.WriteString(fmt.Sprintf("%s %s\n", r.ID, hex.EncodeToString(r.PublicKey[:])))
+	}
+
+	if err := os.WriteFile(tmpPath, []byte(buf.String()), 0o600); err != nil {
+		return fmt.Errorf("write recipients temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace recipients file: %w", err)
+	}
+	return nil
 }
 
 // ParseRecipientLine parses a "<id> <hex-pubkey>" string as written by AddRecipient

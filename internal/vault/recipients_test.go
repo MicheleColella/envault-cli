@@ -167,6 +167,82 @@ func TestParseRecipientLine_TooManyFields(t *testing.T) {
 	}
 }
 
+func TestRemoveRecipient_Removes(t *testing.T) {
+	root := initVaultForTest(t)
+
+	ids := []string{"alice@example.com", "bob@example.com", "carol@example.com"}
+	for i, id := range ids {
+		var pub [32]byte
+		pub[0] = byte(i + 1)
+		if err := AddRecipient(root, Recipient{ID: id, PublicKey: pub}); err != nil {
+			t.Fatalf("AddRecipient(%s): %v", id, err)
+		}
+	}
+
+	if err := RemoveRecipient(root, "bob@example.com"); err != nil {
+		t.Fatalf("RemoveRecipient: %v", err)
+	}
+
+	got, err := ListRecipients(root)
+	if err != nil {
+		t.Fatalf("ListRecipients: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 recipients after removal, got %d", len(got))
+	}
+	for _, r := range got {
+		if r.ID == "bob@example.com" {
+			t.Error("bob should have been removed")
+		}
+	}
+}
+
+func TestRemoveRecipient_NotFound(t *testing.T) {
+	root := initVaultForTest(t)
+
+	err := RemoveRecipient(root, "nobody@example.com")
+	if err == nil {
+		t.Fatal("expected error for non-existent recipient")
+	}
+	if !errors.Is(err, ErrRecipientNotFound) {
+		t.Errorf("error = %v, want ErrRecipientNotFound", err)
+	}
+}
+
+func TestRemoveRecipient_LastEntry(t *testing.T) {
+	root := initVaultForTest(t)
+
+	var pub [32]byte
+	if err := AddRecipient(root, Recipient{ID: "alice@example.com", PublicKey: pub}); err != nil {
+		t.Fatalf("AddRecipient: %v", err)
+	}
+	if err := RemoveRecipient(root, "alice@example.com"); err != nil {
+		t.Fatalf("RemoveRecipient: %v", err)
+	}
+
+	got, err := ListRecipients(root)
+	if err != nil {
+		t.Fatalf("ListRecipients: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("want 0 recipients, got %d", len(got))
+	}
+}
+
+func TestRemoveRecipient_Idempotent(t *testing.T) {
+	root := initVaultForTest(t)
+
+	var pub [32]byte
+	_ = AddRecipient(root, Recipient{ID: "alice@example.com", PublicKey: pub})
+	_ = RemoveRecipient(root, "alice@example.com")
+
+	// Second removal must return ErrRecipientNotFound, not corrupt the file.
+	err := RemoveRecipient(root, "alice@example.com")
+	if !errors.Is(err, ErrRecipientNotFound) {
+		t.Errorf("second removal: got %v, want ErrRecipientNotFound", err)
+	}
+}
+
 func TestListRecipients_SkipsComments(t *testing.T) {
 	root := initVaultForTest(t)
 

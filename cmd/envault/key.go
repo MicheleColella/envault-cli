@@ -214,30 +214,49 @@ func runKeyImport(repoRoot, id, hexPubKey string) error {
 
 func newKeyDeleteCmd() *cobra.Command {
 	var id string
+	var keepRecipient bool
 
 	cmd := &cobra.Command{
 		Use:   "delete",
-		Short: "Remove a keypair from the OS keychain",
+		Short: "Remove a keypair from the OS keychain (and from .envault/recipients)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			kc, err := keychain.New()
 			if err != nil {
 				return err
 			}
-			return runKeyDelete(id, kc)
+			wd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+			return runKeyDelete(id, kc, wd, keepRecipient)
 		},
 	}
 
 	cmd.Flags().StringVar(&id, "id", "", "identity of the keypair to delete, e.g. alice@example.com")
+	cmd.Flags().BoolVar(&keepRecipient, "keep-recipient", false, "do not remove the entry from .envault/recipients")
 	_ = cmd.MarkFlagRequired("id")
 	return cmd
 }
 
 // runKeyDelete is the testable core of "envault key delete".
-func runKeyDelete(id string, kc keychain.Store) error {
+func runKeyDelete(id string, kc keychain.Store, repoRoot string, keepRecipient bool) error {
 	if err := kc.Delete(id); err != nil {
 		return err
 	}
-	ui.OK(fmt.Sprintf("Key deleted for %s", id))
+	ui.OK(fmt.Sprintf("Key deleted from keychain for %s", id))
+
+	if keepRecipient || !vault.IsInitialized(repoRoot) {
+		return nil
+	}
+
+	if err := vault.RemoveRecipient(repoRoot, id); err != nil {
+		if errors.Is(err, vault.ErrRecipientNotFound) {
+			return nil // not in recipients — nothing to do
+		}
+		ui.Warn("could not remove from .envault/recipients: " + err.Error())
+		return nil
+	}
+	ui.Info(fmt.Sprintf("removed from .envault/recipients"))
 	return nil
 }
 
