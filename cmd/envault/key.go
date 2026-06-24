@@ -25,6 +25,7 @@ func newKeyCmd() *cobra.Command {
 		newKeyListCmd(),
 		newKeyExportCmd(),
 		newKeyImportCmd(),
+		newKeyDeleteCmd(),
 	)
 	return cmd
 }
@@ -206,6 +207,37 @@ func runKeyImport(repoRoot, id, hexPubKey string) error {
 	pub := envcrypto.PublicKey(r.PublicKey)
 	ui.OK(fmt.Sprintf("Added recipient %s", id))
 	ui.Info(fmt.Sprintf("fingerprint  %s", pubKeyFingerprint(pub)))
+	return nil
+}
+
+// ---------- key delete ----------
+
+func newKeyDeleteCmd() *cobra.Command {
+	var id string
+
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "Remove a keypair from the OS keychain",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			kc, err := keychain.New()
+			if err != nil {
+				return err
+			}
+			return runKeyDelete(id, kc)
+		},
+	}
+
+	cmd.Flags().StringVar(&id, "id", "", "identity of the keypair to delete, e.g. alice@example.com")
+	_ = cmd.MarkFlagRequired("id")
+	return cmd
+}
+
+// runKeyDelete is the testable core of "envault key delete".
+func runKeyDelete(id string, kc keychain.Store) error {
+	if err := kc.Delete(id); err != nil {
+		return err
+	}
+	ui.OK(fmt.Sprintf("Key deleted for %s", id))
 	return nil
 }
 

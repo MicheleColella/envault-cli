@@ -377,6 +377,40 @@ func TestRunKeyImport_DuplicateIsSkipped(t *testing.T) {
 	}
 }
 
+// ---- key delete ----
+
+func TestRunKeyDelete_RemovesKey(t *testing.T) {
+	kc := newMemStore()
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyNew("alice@example.com", kc, t.TempDir()); err != nil {
+		t.Fatalf("runKeyNew: %v", err)
+	}
+	if err := runKeyDelete("alice@example.com", kc); err != nil {
+		t.Fatalf("runKeyDelete: %v", err)
+	}
+	if _, err := kc.Unseal("alice@example.com"); !errors.Is(err, keychain.ErrNotFound) {
+		t.Errorf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestRunKeyDelete_NotFound(t *testing.T) {
+	kc := newMemStore()
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	err := runKeyDelete("nobody@example.com", kc)
+	if err == nil {
+		t.Fatal("expected error for non-existent key")
+	}
+	if !errors.Is(err, keychain.ErrNotFound) {
+		t.Errorf("error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestRunKeyImport_InvalidHex(t *testing.T) {
 	root := initVaultRoot(t)
 
