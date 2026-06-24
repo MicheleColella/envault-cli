@@ -31,6 +31,7 @@ func newRootCmd(ver string) *cobra.Command {
 		newInitCmd(),
 		newKeyCmd(),
 		newImportCmd(),
+		newDataCmd(),
 		newAddCmd(),
 		newListCmd(),
 		newPushCmd(),
