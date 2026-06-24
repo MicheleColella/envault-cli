@@ -10,7 +10,6 @@ import (
 	"strings"
 )
 
-
 // ErrRecipientAlreadyExists is returned by AddRecipient when an entry with the
 // same ID is already present in the recipients file.
 var ErrRecipientAlreadyExists = errors.New("recipient already exists for this id")
