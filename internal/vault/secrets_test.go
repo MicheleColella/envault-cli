@@ -99,6 +99,49 @@ func TestUpsert_SameNameDifferentKindCoexist(t *testing.T) {
 	}
 }
 
+func TestDelete_RemovesMatchingEntry(t *testing.T) {
+	s := &Store{Version: storeVersion}
+	s = s.Upsert(sealTestEntry(t, "TOKEN", KindEnv, "v"))
+	s = s.Delete("TOKEN", KindEnv)
+
+	if len(s.Entries) != 0 {
+		t.Errorf("expected 0 entries after Delete, got %d", len(s.Entries))
+	}
+}
+
+func TestDelete_DoesNotMutateReceiver(t *testing.T) {
+	original := &Store{Version: storeVersion}
+	original = original.Upsert(sealTestEntry(t, "X", KindEnv, "v"))
+	original.Delete("X", KindEnv)
+	if len(original.Entries) != 1 {
+		t.Errorf("Delete mutated the receiver: %d entries", len(original.Entries))
+	}
+}
+
+func TestDelete_NoopWhenNotFound(t *testing.T) {
+	s := &Store{Version: storeVersion}
+	s = s.Upsert(sealTestEntry(t, "TOKEN", KindEnv, "v"))
+	s2 := s.Delete("MISSING", KindEnv)
+
+	if len(s2.Entries) != 1 {
+		t.Errorf("expected store unchanged, got %d entries", len(s2.Entries))
+	}
+}
+
+func TestDelete_OnlyRemovesMatchingKind(t *testing.T) {
+	s := &Store{Version: storeVersion}
+	s = s.Upsert(sealTestEntry(t, "config", KindEnv, "env-val"))
+	s = s.Upsert(sealTestEntry(t, "config", KindFile, "file-val"))
+	s = s.Delete("config", KindEnv)
+
+	if len(s.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(s.Entries))
+	}
+	if s.Entries[0].Kind != KindFile {
+		t.Errorf("wrong entry remaining: kind = %q, want file", s.Entries[0].Kind)
+	}
+}
+
 func TestUpsert_PreservesCreatedAtOnReplace(t *testing.T) {
 	s := &Store{Version: storeVersion}
 	first := sealTestEntry(t, "TOKEN", KindEnv, "old")

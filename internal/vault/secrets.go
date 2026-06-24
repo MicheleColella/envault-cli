@@ -86,6 +86,19 @@ func SaveStore(repoRoot string, s *Store) error {
 	return nil
 }
 
+// Delete returns a new Store with the entry of the given name and kind removed.
+// If no matching entry exists, the store is returned unchanged.
+// The receiver is never mutated.
+func (s *Store) Delete(name string, kind EntryKind) *Store {
+	entries := make([]Entry, 0, len(s.Entries))
+	for _, e := range s.Entries {
+		if e.Name != name || e.Kind != kind {
+			entries = append(entries, e)
+		}
+	}
+	return &Store{Version: storeVersion, Entries: entries}
+}
+
 // Upsert returns a new Store with e added, or replacing an existing entry that
 // has the same name and kind. The original CreatedAt is preserved on replace so
 // it records first-seal time, while UpdatedAt reflects the latest seal.
