@@ -6,7 +6,7 @@ PREFIX  ?= /usr/local/bin
 .PHONY: build clean test lint vet install uninstall test-install
 
 build:
-	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BINARY) ./cmd/envault
+	CGO_ENABLED=0 go build $(LDFLAGS) -buildvcs=false -o $(BINARY) ./cmd/envault
 
 clean:
 	rm -f $(BINARY)
