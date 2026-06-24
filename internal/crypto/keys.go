@@ -32,6 +32,17 @@ func GenerateKeyPair() (PrivateKey, PublicKey, error) {
 	return priv, pubKey, nil
 }
 
+// DerivePublicKey computes the X25519 public key corresponding to priv.
+func DerivePublicKey(priv PrivateKey) (PublicKey, error) {
+	pub, err := curve25519.X25519(priv[:], curve25519.Basepoint)
+	if err != nil {
+		return PublicKey{}, err
+	}
+	var pubKey PublicKey
+	copy(pubKey[:], pub)
+	return pubKey, nil
+}
+
 // deriveWrappingKey produces a 32-byte wrapping key via HKDF-SHA256.
 // recipientPub is bound into the info field to prevent cross-recipient key
 // substitution (the same ephemeral key cannot be repurposed for a different recipient).

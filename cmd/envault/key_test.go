@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 
+	envcrypto "github.com/MicheleColella/envault-cli/internal/crypto"
 	"github.com/MicheleColella/envault-cli/internal/keychain"
 	"github.com/MicheleColella/envault-cli/internal/ui"
+	"github.com/MicheleColella/envault-cli/internal/vault"
 )
 
 // memStore is an in-memory keychain.Store used in tests.
@@ -45,6 +48,18 @@ func (m *memStore) Delete(id string) error {
 	return nil
 }
 
+// initVaultRoot creates a temp dir with an initialized vault for tests that need it.
+func initVaultRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if _, err := vault.Init(root, "", false); err != nil {
+		t.Fatalf("vault.Init: %v", err)
+	}
+	return root
+}
+
+// ---- key new ----
+
 func TestRunKeyNew_SealsPrivateKey(t *testing.T) {
 	kc := newMemStore()
 
@@ -52,7 +67,7 @@ func TestRunKeyNew_SealsPrivateKey(t *testing.T) {
 	ui.Out = &out
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runKeyNew("alice@example.com", kc); err != nil {
+	if err := runKeyNew("alice@example.com", kc, t.TempDir()); err != nil {
 		t.Fatalf("runKeyNew: %v", err)
 	}
 
@@ -72,7 +87,7 @@ func TestRunKeyNew_PrintsExpectedOutput(t *testing.T) {
 	ui.Out = &out
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runKeyNew("alice@example.com", kc); err != nil {
+	if err := runKeyNew("alice@example.com", kc, t.TempDir()); err != nil {
 		t.Fatalf("runKeyNew: %v", err)
 	}
 
@@ -97,12 +112,11 @@ func TestRunKeyNew_FingerprintIsHex(t *testing.T) {
 	ui.Out = &out
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runKeyNew("bob@example.com", kc); err != nil {
+	if err := runKeyNew("bob@example.com", kc, t.TempDir()); err != nil {
 		t.Fatalf("runKeyNew: %v", err)
 	}
 
 	got := out.String()
-	// Extract the sha256: line and verify it contains 64 hex chars.
 	for _, line := range strings.Split(got, "\n") {
 		if strings.Contains(line, "sha256:") {
 			parts := strings.SplitN(line, "sha256:", 2)
@@ -125,10 +139,10 @@ func TestRunKeyNew_DifferentKeysEachCall(t *testing.T) {
 	ui.Out = &bytes.Buffer{}
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runKeyNew("alice@example.com", kc1); err != nil {
+	if err := runKeyNew("alice@example.com", kc1, t.TempDir()); err != nil {
 		t.Fatalf("first runKeyNew: %v", err)
 	}
-	if err := runKeyNew("alice@example.com", kc2); err != nil {
+	if err := runKeyNew("alice@example.com", kc2, t.TempDir()); err != nil {
 		t.Fatalf("second runKeyNew: %v", err)
 	}
 
@@ -145,14 +159,232 @@ func TestRunKeyNew_AlreadyExists(t *testing.T) {
 	ui.Out = &bytes.Buffer{}
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runKeyNew("alice@example.com", kc); err != nil {
+	if err := runKeyNew("alice@example.com", kc, t.TempDir()); err != nil {
 		t.Fatalf("first runKeyNew: %v", err)
 	}
-	err := runKeyNew("alice@example.com", kc)
+	err := runKeyNew("alice@example.com", kc, t.TempDir())
 	if err == nil {
 		t.Fatal("expected error when key already exists")
 	}
 	if !errors.Is(err, keychain.ErrAlreadyExists) {
 		t.Errorf("error = %v, want ErrAlreadyExists", err)
+	}
+}
+
+func TestRunKeyNew_AddsRecipientWhenVaultInitialized(t *testing.T) {
+	kc := newMemStore()
+	root := initVaultRoot(t)
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyNew("alice@example.com", kc, root); err != nil {
+		t.Fatalf("runKeyNew: %v", err)
+	}
+
+	rs, err := vault.ListRecipients(root)
+	if err != nil {
+		t.Fatalf("ListRecipients: %v", err)
+	}
+	if len(rs) != 1 || rs[0].ID != "alice@example.com" {
+		t.Errorf("expected alice in recipients, got %v", rs)
+	}
+}
+
+func TestRunKeyNew_SkipsRecipientWhenVaultNotInitialized(t *testing.T) {
+	kc := newMemStore()
+	root := t.TempDir() // no vault
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	// Should succeed without error even though vault doesn't exist.
+	if err := runKeyNew("alice@example.com", kc, root); err != nil {
+		t.Fatalf("runKeyNew: %v", err)
+	}
+}
+
+func TestRunKeyNew_DuplicateRecipientIsSkipped(t *testing.T) {
+	kc1, kc2 := newMemStore(), newMemStore()
+	root := initVaultRoot(t)
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyNew("alice@example.com", kc1, root); err != nil {
+		t.Fatalf("first runKeyNew: %v", err)
+	}
+	// Second key new with same ID but different store — should not error.
+	if err := runKeyNew("alice@example.com", kc2, root); err != nil {
+		t.Fatalf("second runKeyNew: %v", err)
+	}
+
+	rs, _ := vault.ListRecipients(root)
+	if len(rs) != 1 {
+		t.Errorf("expected 1 recipient (duplicate skipped), got %d", len(rs))
+	}
+}
+
+// ---- key list ----
+
+func TestRunKeyList_Empty(t *testing.T) {
+	root := initVaultRoot(t)
+
+	var out bytes.Buffer
+	ui.Out = &out
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyList(root); err != nil {
+		t.Fatalf("runKeyList: %v", err)
+	}
+	if !strings.Contains(out.String(), "no recipients") {
+		t.Errorf("expected 'no recipients' message, got: %s", out.String())
+	}
+}
+
+func TestRunKeyList_ShowsRecipients(t *testing.T) {
+	root := initVaultRoot(t)
+
+	var pub [32]byte
+	_ = vault.AddRecipient(root, vault.Recipient{ID: "alice@example.com", PublicKey: pub})
+
+	var out bytes.Buffer
+	ui.Out = &out
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyList(root); err != nil {
+		t.Fatalf("runKeyList: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "alice@example.com") {
+		t.Errorf("expected alice in output, got: %s", got)
+	}
+	if !strings.Contains(got, "sha256:") {
+		t.Errorf("expected fingerprint in output, got: %s", got)
+	}
+}
+
+// ---- key export ----
+
+func TestRunKeyExport_OutputsLine(t *testing.T) {
+	kc := newMemStore()
+	id := "alice@example.com"
+
+	// Generate and seal a key.
+	priv, pub, err := envcrypto.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	if err := kc.Seal(id, priv[:]); err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	var out bytes.Buffer
+	ui.Out = &out
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyExport(id, kc); err != nil {
+		t.Fatalf("runKeyExport: %v", err)
+	}
+
+	line := strings.TrimSpace(out.String())
+	parts := strings.Fields(line)
+	if len(parts) != 2 {
+		t.Fatalf("expected '<id> <hex>', got %q", line)
+	}
+	if parts[0] != id {
+		t.Errorf("id = %q, want %q", parts[0], id)
+	}
+
+	keyBytes, err := hex.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("hex decode: %v", err)
+	}
+	var gotPub [32]byte
+	copy(gotPub[:], keyBytes)
+	if gotPub != pub {
+		t.Errorf("exported public key does not match original")
+	}
+}
+
+func TestRunKeyExport_KeyNotFound(t *testing.T) {
+	kc := newMemStore()
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	err := runKeyExport("nobody@example.com", kc)
+	if err == nil {
+		t.Fatal("expected error for unknown id")
+	}
+	if !errors.Is(err, keychain.ErrNotFound) {
+		t.Errorf("error = %v, want ErrNotFound", err)
+	}
+}
+
+// ---- key import ----
+
+func TestRunKeyImport_AddsRecipient(t *testing.T) {
+	root := initVaultRoot(t)
+
+	_, pub, err := envcrypto.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	hexPub := hex.EncodeToString(pub[:])
+
+	var out bytes.Buffer
+	ui.Out = &out
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyImport(root, "alice@example.com", hexPub); err != nil {
+		t.Fatalf("runKeyImport: %v", err)
+	}
+
+	rs, err := vault.ListRecipients(root)
+	if err != nil {
+		t.Fatalf("ListRecipients: %v", err)
+	}
+	if len(rs) != 1 || rs[0].ID != "alice@example.com" {
+		t.Errorf("expected alice in recipients, got %v", rs)
+	}
+	if !strings.Contains(out.String(), "alice@example.com") {
+		t.Errorf("expected success output, got: %s", out.String())
+	}
+}
+
+func TestRunKeyImport_DuplicateIsSkipped(t *testing.T) {
+	root := initVaultRoot(t)
+
+	_, pub, _ := envcrypto.GenerateKeyPair()
+	hexPub := hex.EncodeToString(pub[:])
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runKeyImport(root, "alice@example.com", hexPub); err != nil {
+		t.Fatalf("first runKeyImport: %v", err)
+	}
+	// Second import of same ID should not error.
+	if err := runKeyImport(root, "alice@example.com", hexPub); err != nil {
+		t.Fatalf("second runKeyImport: %v", err)
+	}
+
+	rs, _ := vault.ListRecipients(root)
+	if len(rs) != 1 {
+		t.Errorf("expected 1 recipient, got %d", len(rs))
+	}
+}
+
+func TestRunKeyImport_InvalidHex(t *testing.T) {
+	root := initVaultRoot(t)
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	err := runKeyImport(root, "alice@example.com", "not-hex")
+	if err == nil {
+		t.Fatal("expected error for invalid hex")
 	}
 }
