@@ -1,120 +1,139 @@
 # Envault
 
-> Git-backed, zero-trust secrets CLI for teams.
+> Git-backed, zero-trust secrets manager for developer teams.
 
-Envault encrypts your API keys and tokens directly inside your existing Git repo. Every secret stays ciphertext in the remote; private keys never leave the machine. Secrets are injected into a child process in memory at runtime — never written to disk.
+Envault encrypts your API keys and tokens directly inside your existing Git repo.
+No central vault, no third-party trust, no `.env` files committed in plaintext.
+Private keys never leave your machine. Secrets are injected into processes in memory
+at runtime — never written to disk.
 
 ---
 
-## How it works
+## Why Envault
 
-Envault uses **envelope encryption** (modelled on the [age](https://age-encryption.org) file format):
+Most teams leak secrets without realising it:
 
-1. A fresh random **data encryption key (DEK)** is generated for each secret.
-2. The secret payload is sealed with the DEK using **AES-256-GCM** (or ChaCha20-Poly1305).
-3. The DEK is wrapped for each team member via **ephemeral X25519 ECDH** + **HKDF-SHA256**, producing a per-recipient encrypted block.
-4. The resulting envelope (JSON) is committed to `.envault/` inside the repo.
+- `.env` files committed to repos (anyone with clone access has the keys)
+- Secrets passed over Slack, email, or copy-paste
+- A shared vault that requires trusting a third-party server
 
-Private keys never touch the network. The Git remote only ever stores ciphertext.
+Envault is different: it uses your team's existing Git remote as the transport.
+Each secret is encrypted end-to-end — only team members who have been granted
+access can decrypt. Remove a member from the vault and they lose future access.
+No new infrastructure required.
 
+---
+
+## Quick start
+
+```sh
+# 1. Build
+make build
+
+# 2. Initialise a vault in your repo
+envault init
+
+# 3. Generate your identity key (private key stays in your OS keychain)
+envault key new --id you@example.com
+
+# 4. Add a secret
+echo "sk-abc123" | envault add OPENAI_KEY
+
+# 5. Push the encrypted vault to your remote
+envault push
+
+# 6. A teammate pulls and runs their app with secrets injected (coming in v0.6.0)
+envault run -- npm start
 ```
-┌─────────────────────────────────────────────────┐
-│                    Envelope                      │
-│  version · suite · nonce · ciphertext(payload)  │
-│  ┌──────────────────────────────────┐            │
-│  │ Recipient 0                      │            │
-│  │  ephemeral_public · nonce        │            │
-│  │  wrapped_key = AES-GCM(DEK)      │            │
-│  └──────────────────────────────────┘            │
-│  ┌──────────────────────────────────┐            │
-│  │ Recipient N  …                   │            │
-│  └──────────────────────────────────┘            │
-└─────────────────────────────────────────────────┘
-```
+
+---
+
+## Commands
+
+| Command | Description | Status |
+|---|---|---|
+| `envault init` | Initialise a vault in the current repo | ✅ |
+| `envault key new` | Generate an identity key (sealed in OS keychain) | ✅ |
+| `envault key list` | List vault recipients | ✅ |
+| `envault key export` | Export your public key to share with teammates | ✅ |
+| `envault key import` | Add a teammate's public key as a recipient | ✅ |
+| `envault key delete` | Remove a recipient from the vault | ✅ |
+| `envault import <file.env>` | Bulk-import from an existing `.env` file | ✅ |
+| `envault data store <file>` | Store an arbitrary file (JSON, PEM, binary…) | ✅ |
+| `envault add <KEY>` | Add or update a single secret | ✅ |
+| `envault set <KEY>` | Re-seal an existing secret with a new value | ✅ |
+| `envault rm <KEY>` | Remove a secret from the vault | ✅ |
+| `envault list` | List all secrets (names only — no plaintext) | ✅ |
+| `envault cat <KEY>` | Decrypt and print a single secret | ✅ |
+| `envault export` | Decrypt all env secrets as `export KEY=value` | ✅ |
+| `envault push` | Stage, commit, and push the encrypted vault | ✅ |
+| `envault pull` | Fetch and merge the vault; report changes | ✅ |
+| `envault run -- <cmd>` | Inject secrets in memory and run a command | 🚧 v0.6.0 |
+| `envault hook` | Manage Git and Claude Code hooks | 🚧 v0.7.0 |
+
+---
+
+## Security model
+
+Envault is designed so that you do not have to trust anyone except your Git remote:
+
+- **End-to-end encryption** — secrets are encrypted on your machine before they are committed. Only recipients with a matching private key can decrypt.
+- **Private keys never leave your machine** — they are sealed in the OS keychain (macOS Keychain or Linux Secret Service) and are never sent anywhere.
+- **Zero-trust remote** — the Git remote only ever stores ciphertext. Even if the remote is compromised, no secrets are exposed.
+- **No disk writes** — secrets are decrypted in memory and injected directly into the child process. Nothing is written to a temp file.
+- **Per-recipient access control** — adding or removing a teammate from the vault controls who can decrypt. Each secret is independently encrypted for the current recipient set.
+- **Integrity guaranteed** — ciphertext is authenticated; any tampering is detected and rejected before decryption.
+
+---
 
 ## Status
 
-Early development — core crypto is implemented and tested; vault, Git sync, and runtime injection are still stub commands.
+Active development — core vault, key management, and Git sync are fully implemented.
+Runtime injection and hook integration are coming next.
 
 | Milestone | Status |
-|-----------|--------|
-| v0.1.0 — Project scaffold & CLI skeleton | ✅ shipped |
-| v0.1.1 — CI & build tooling | ✅ shipped |
-| v0.2.0 — Crypto core (AES-256-GCM + X25519 envelope) | ✅ shipped |
-| v0.2.1 — Crypto test vectors & tamper tests | planned |
-| v0.3.0 — Vault init | planned |
-| v0.4.0 — Secret import & local encryption | planned |
-| v0.5.0 — Git sync (push / pull) | planned |
-| v0.6.0 — Runtime injection | planned |
+|---|---|
+| v0.1–0.2 — Scaffold, CI, crypto core | ✅ shipped |
+| v0.3 — Vault init, key management | ✅ shipped |
+| v0.4 — Secret import, add/set/rm, list, cat/export | ✅ shipped |
+| v0.5.0 — Git push / pull | ✅ shipped |
+| v0.5.1 — Recipient re-wrap & rotation | 🔜 next |
+| v0.6.0 — Runtime injection (`envault run`) | planned |
+| v0.7.0 — Git pre-commit hook (leak prevention) | planned |
+| v0.8.0 — Claude Code & AI agent integration | planned |
 | v1.0.0 — Stable release | planned |
+
+---
 
 ## Requirements
 
 - Go 1.21+
 - macOS or Linux
-- Git
+- Git (any version with remote support)
+
+---
 
 ## Build
 
 ```sh
-make build          # produces ./envault (static, CGO_ENABLED=0)
-make test           # go test ./...
-make lint           # golangci-lint run ./...
+make build          # static binary → ./envault  (CGO_ENABLED=0)
+go test ./...       # run the test suite
 ```
 
-The binary embeds its version from `git describe`:
+The binary embeds its version from the latest git tag:
 
 ```sh
 ./envault --version
 ```
 
-## Usage
-
-```
-envault <command> [flags]
-
-Commands:
-  init      Initialise a new vault in the current repo
-  key       Manage your X25519 keypair
-  import    Import existing environment variables into the vault
-  add       Add or update a single secret
-  list      List secrets visible to the current key
-  push      Push encrypted vault to the remote
-  pull      Pull and merge vault from the remote
-  run       Inject secrets and run a command
-  hook      Manage Git and Claude Code hooks
-```
-
-> Most commands are stubs — they will be implemented progressively through the roadmap above.
-
-## Security design
-
-| Property | Mechanism |
-|---|---|
-| Confidentiality | AES-256-GCM or ChaCha20-Poly1305 per secret |
-| Key wrapping | Ephemeral X25519 ECDH + HKDF-SHA256 per recipient |
-| Integrity | AEAD authentication tag; envelope metadata bound as additional data |
-| Forward secrecy of wraps | Fresh ephemeral keypair per recipient per seal |
-| Memory safety | Sensitive key material (`defer clear()`) zeroed after use |
-| No secret on disk | Runtime injection via child process environment; never persisted |
-| Zero-trust remote | Git remote holds only ciphertext; private keys are local-only |
-
-## Project layout
-
-```
-cmd/envault/        Cobra CLI entry point and command files
-internal/
-  crypto/           Envelope encryption: Seal / Unseal, AEAD, X25519 keys
-  vault/            Vault layout and secret records (planned)
-  git/              Push / pull via go-git (planned)
-  keychain/         OS keychain integration — macOS Keychain / Linux Secret Service (planned)
-  hook/             Git pre-commit and Claude Code hook management (planned)
-  ui/               Shared terminal output (colored glyphs, NO_COLOR-aware)
-```
+---
 
 ## Contributing
 
-This project is in active early development. The roadmap is managed internally; feel free to open an issue to discuss ideas or report bugs.
+The project is in active development. The roadmap is managed internally.
+Feel free to open an issue to discuss ideas, report bugs, or ask questions.
+
+---
 
 ## License
 

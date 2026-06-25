@@ -40,6 +40,14 @@ func runInit(repoRoot string, force bool) error {
 	cfg, err := vault.Init(repoRoot, remote, force)
 	if err != nil {
 		if errors.Is(err, vault.ErrAlreadyInitialized) {
+			// If .envault/ was committed by a remote (e.g., the user cloned a repo
+			// that already had the vault), treat init as a no-op rather than an error.
+			// Locally created but never-pushed vault files remain an error (see
+			// TestRunInit_AlreadyInitialized) so --force is still required there.
+			if git.IsVaultTracked(repoRoot) {
+				ui.Info(fmt.Sprintf("Vault already initialized at %s/", vault.DirName))
+				return nil
+			}
 			return err
 		}
 		return fmt.Errorf("init vault: %w", err)
