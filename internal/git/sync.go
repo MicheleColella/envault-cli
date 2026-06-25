@@ -107,7 +107,7 @@ func CurrentBranch(repoRoot string) (string, error) {
 // gitRun runs a git subcommand inside dir, returning a descriptive error
 // that includes git's stderr output on failure.
 func gitRun(dir string, args ...string) error {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) //nolint:gosec // args are always hardcoded call sites
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -124,7 +124,7 @@ func gitRun(dir string, args ...string) error {
 
 // gitOutput runs a git subcommand inside dir and returns its stdout.
 func gitOutput(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) //nolint:gosec // args are always hardcoded call sites
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

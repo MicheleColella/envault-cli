@@ -49,7 +49,7 @@ func seedRemote(t *testing.T, bareRemote string) {
 		t.Fatalf("seed user.name: %v", err)
 	}
 	readme := filepath.Join(seed, "README")
-	if err := os.WriteFile(readme, []byte("envault test repo\n"), 0o644); err != nil {
+	if err := os.WriteFile(readme, []byte("envault test repo\n"), 0o600); err != nil {
 		t.Fatalf("write README: %v", err)
 	}
 	if err := gitRun(seed, "add", "README"); err != nil {

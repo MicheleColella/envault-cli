@@ -10,7 +10,7 @@ import (
 // mustGit runs a git subcommand inside dir and fatals on error.
 func mustGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) //nolint:gosec // test helper with hardcoded command
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -32,7 +32,7 @@ func initTestRepo(t *testing.T, email, name string) (string, string) {
 	mustGit(t, seed, "clone", bare, seed)
 	mustGit(t, seed, "config", "user.email", "seed@test.com")
 	mustGit(t, seed, "config", "user.name", "Seed")
-	if err := os.WriteFile(seed+"/README", []byte("test\n"), 0o644); err != nil {
+	if err := os.WriteFile(seed+"/README", []byte("test\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	mustGit(t, seed, "add", "README")
