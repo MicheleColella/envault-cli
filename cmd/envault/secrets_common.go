@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	envcrypto "github.com/MicheleColella/envault-cli/internal/crypto"
+	"github.com/MicheleColella/envault-cli/internal/keychain"
 	"github.com/MicheleColella/envault-cli/internal/vault"
 )
 
@@ -30,6 +32,33 @@ func loadRecipientKeys(repoRoot string) ([]envcrypto.PublicKey, []string, error)
 		ids[i] = r.ID
 	}
 	return keys, ids, nil
+}
+
+// loadCurrentUserKey scans vault recipients and returns the first private key
+// found in the OS keychain, along with its ID. The "current user" is whoever
+// has a locally-stored key that matches a vault recipient.
+func loadCurrentUserKey(repoRoot string, kc keychain.Store) (envcrypto.PrivateKey, string, error) {
+	recipients, err := vault.ListRecipients(repoRoot)
+	if err != nil {
+		return envcrypto.PrivateKey{}, "", err
+	}
+
+	for _, r := range recipients {
+		privBytes, err := kc.Unseal(r.ID)
+		if errors.Is(err, keychain.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return envcrypto.PrivateKey{}, "", fmt.Errorf("unseal key for %s: %w", r.ID, err)
+		}
+		var priv envcrypto.PrivateKey
+		copy(priv[:], privBytes)
+		return priv, r.ID, nil
+	}
+
+	return envcrypto.PrivateKey{}, "", fmt.Errorf(
+		"no private key found in keychain for any vault recipient — add one with `envault key new`",
+	)
 }
 
 // sealEntry encrypts payload for the given recipients with AES-256-GCM and
