@@ -83,7 +83,7 @@ func runCat(repoRoot, name string, kc keychain.Store) error {
 	}
 	defer clear(priv[:])
 
-	fmt.Fprintf(ui.Err, "! WARNING: decrypting %s as %s — plaintext will be visible in this terminal\n", name, id)
+	_, _ = fmt.Fprintf(ui.Err, "! WARNING: decrypting %s as %s — plaintext will be visible in this terminal\n", name, id)
 
 	plaintext, err := envcrypto.Unseal(found.Envelope, priv)
 	if err != nil {
@@ -123,7 +123,7 @@ func runExport(repoRoot string, kc keychain.Store) error {
 	}
 	defer clear(priv[:])
 
-	fmt.Fprintf(ui.Err, "! WARNING: exporting %d secret(s) as %s — plaintext will be visible in this terminal\n", len(envEntries), id)
+	_, _ = fmt.Fprintf(ui.Err, "! WARNING: exporting %d secret(s) as %s — plaintext will be visible in this terminal\n", len(envEntries), id)
 
 	for _, e := range envEntries {
 		plaintext, err := envcrypto.Unseal(e.Envelope, priv)
