@@ -15,7 +15,7 @@ func TestRootVersion(t *testing.T) {
 
 func TestRootCommandsRegistered(t *testing.T) {
 	cmd := newRootCmd("dev")
-	want := []string{"init", "key", "import", "add", "set", "rm", "list", "cat", "export", "push", "pull", "rotate", "run", "hook"}
+	want := []string{"init", "key", "import", "add", "data", "set", "rm", "list", "cat", "export", "push", "pull", "rotate", "run", "hook"}
 
 	registered := make(map[string]bool)
 	for _, c := range cmd.Commands() {
@@ -30,7 +30,7 @@ func TestRootCommandsRegistered(t *testing.T) {
 }
 
 func TestStubCommandsReturnError(t *testing.T) {
-	stubs := []string{"run", "hook"}
+	stubs := []string{"hook"}
 	for _, name := range stubs {
 		t.Run(name, func(t *testing.T) {
 			root := newRootCmd("dev")
@@ -48,14 +48,14 @@ func TestStubErrorContainsCommandNameAndReason(t *testing.T) {
 	root := newRootCmd("dev")
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run"})
+	root.SetArgs([]string{"hook"})
 
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error from stub command")
 	}
-	if !strings.Contains(err.Error(), "run") {
-		t.Errorf("error = %q, want command name 'run'", err.Error())
+	if !strings.Contains(err.Error(), "hook") {
+		t.Errorf("error = %q, want command name 'hook'", err.Error())
 	}
 	if !strings.Contains(err.Error(), "not implemented") {
 		t.Errorf("error = %q, want 'not implemented'", err.Error())
