@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -16,18 +17,32 @@ import (
 	"github.com/MicheleColella/envault-cli/internal/vault"
 )
 
+// runFilter controls which KindEnv entries are injected.
+// If only is non-empty, inject only those keys.
+// If except is non-empty (and only is empty), inject all except those keys.
+// Both flags are mutually exclusive at the command level.
+type runFilter struct {
+	only   []string
+	except []string
+}
+
 func newRunCmd() *cobra.Command {
-	return &cobra.Command{
+	var onlyFlag, exceptFlag []string
+
+	cmd := &cobra.Command{
 		Use:   "run -- <command> [args...]",
 		Short: "Inject decrypted secrets and execute a command",
-		Long: "Decrypt all env secrets into memory and run the given command with\n" +
-			"them injected as environment variables. Secrets are never written to\n" +
-			"disk and are zeroed from memory when the command exits.\n\n" +
+		Long: "Decrypt env secrets into memory and run the given command with them\n" +
+			"injected as environment variables. Secrets are never written to disk\n" +
+			"and are zeroed from memory when the command exits.\n\n" +
 			"Use -- to separate envault flags from the child command:\n" +
 			"  envault run -- npm start\n" +
-			"  envault run -- go test ./...",
+			"  envault run --only DB_URL,API_KEY -- go test ./...",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(onlyFlag) > 0 && len(exceptFlag) > 0 {
+				return fmt.Errorf("--only and --except are mutually exclusive")
+			}
 			kc, err := keychain.New()
 			if err != nil {
 				return fmt.Errorf("open keychain: %w", err)
@@ -36,7 +51,7 @@ func newRunCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("get working directory: %w", err)
 			}
-			err = runRun(wd, args, kc)
+			err = runRun(wd, args, kc, runFilter{only: onlyFlag, except: exceptFlag})
 			var ece exitCodeError
 			if errors.As(err, &ece) {
 				os.Exit(ece.code)
@@ -44,6 +59,11 @@ func newRunCmd() *cobra.Command {
 			return err
 		},
 	}
+
+	cmd.Flags().StringSliceVar(&onlyFlag, "only", nil, "comma-separated keys to inject (default: all)")
+	cmd.Flags().StringSliceVar(&exceptFlag, "except", nil, "comma-separated keys to skip")
+
+	return cmd
 }
 
 // exitCodeError carries the exit code of a child process so the parent can
@@ -52,11 +72,10 @@ type exitCodeError struct{ code int }
 
 func (e exitCodeError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
 
-// runRun decrypts all KindEnv secrets into memory, injects them into the
-// child's environment, and runs args[0] with args[1:]. On child exit the
-// plaintext is zeroed. The child's exit code is returned as exitCodeError so
-// the caller can propagate it after cleanup.
-func runRun(repoRoot string, args []string, kc keychain.Store) error {
+// runRun decrypts KindEnv secrets (subject to f), injects them into the child
+// environment, and runs args[0] with args[1:]. Plaintext is zeroed on return.
+// A non-zero child exit code is returned as exitCodeError.
+func runRun(repoRoot string, args []string, kc keychain.Store, f runFilter) error {
 	if !vault.IsInitialized(repoRoot) {
 		return fmt.Errorf("vault not initialized — run `envault init` first")
 	}
@@ -66,11 +85,24 @@ func runRun(repoRoot string, args []string, kc keychain.Store) error {
 		return err
 	}
 
+	onlySet := toSet(f.only)
+	exceptSet := toSet(f.except)
+
 	var envEntries []vault.Entry
 	for _, e := range store.Entries {
-		if e.Kind == vault.KindEnv {
-			envEntries = append(envEntries, e)
+		if e.Kind != vault.KindEnv {
+			continue
 		}
+		if len(onlySet) > 0 {
+			if _, ok := onlySet[e.Name]; !ok {
+				continue
+			}
+		} else if len(exceptSet) > 0 {
+			if _, ok := exceptSet[e.Name]; ok {
+				continue
+			}
+		}
+		envEntries = append(envEntries, e)
 	}
 
 	priv, id, err := loadCurrentUserKey(repoRoot, kc)
@@ -139,4 +171,15 @@ func runRun(repoRoot string, args []string, kc keychain.Store) error {
 		return waitErr
 	}
 	return nil
+}
+
+func toSet(keys []string) map[string]struct{} {
+	if len(keys) == 0 {
+		return nil
+	}
+	s := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		s[strings.TrimSpace(k)] = struct{}{}
+	}
+	return s
 }
