@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// absentStageMarkers are substrings that git show prints when a path does not
+// exist at a given merge stage. Only these errors should be treated as
+// "file absent at this stage" and return nil,nil from ConflictStage.
+var absentStageMarkers = []string{
+	"does not exist in the index",
+	"exists on disk, but not in",
+	"Path",
+}
+
 // ErrMergeConflict is returned by MergeOrigin when the merge produces
 // unresolved conflicts. Inspect the working tree, call resolveSecretsConflict,
 // then ContinueMerge — or AbortMerge to restore the pre-merge state.
@@ -38,8 +47,15 @@ func ConflictStage(repoRoot string, stage int, path string) ([]byte, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		// File absent at this stage is not an error for our merge logic.
-		return nil, nil
+		// Treat "file not present at this stage" as a legitimate absent case.
+		// All other errors (missing git binary, corrupt object DB, wrong dir) are propagated.
+		msg := stderr.String()
+		for _, marker := range absentStageMarkers {
+			if strings.Contains(msg, marker) {
+				return nil, nil
+			}
+		}
+		return nil, fmt.Errorf("git show %s: %w: %s", ref, err, strings.TrimSpace(msg))
 	}
 	return stdout.Bytes(), nil
 }

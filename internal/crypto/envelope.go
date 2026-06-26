@@ -119,11 +119,16 @@ func Rewrap(env *Envelope, privKey PrivateKey, recipients []PublicKey) (*Envelop
 		return nil, err
 	}
 
+	nonce := make([]byte, len(env.Nonce))
+	copy(nonce, env.Nonce)
+	ct := make([]byte, len(env.Ciphertext))
+	copy(ct, env.Ciphertext)
+
 	return &Envelope{
 		Version:    env.Version,
 		Suite:      env.Suite,
-		Nonce:      env.Nonce,
-		Ciphertext: env.Ciphertext,
+		Nonce:      nonce,
+		Ciphertext: ct,
 		Recipients: blocks,
 	}, nil
 }
@@ -179,6 +184,7 @@ func wrapDEK(dek []byte, recipPub PublicKey, suite CipherSuite) (Recipient, erro
 	if err != nil {
 		return Recipient{}, fmt.Errorf("generate ephemeral keypair: %w", err)
 	}
+	defer clear(ephPriv[:]) // zero the ephemeral private scalar after ECDH
 
 	shared, err := curve25519.X25519(ephPriv[:], recipPub[:])
 	if err != nil {

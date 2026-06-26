@@ -73,7 +73,10 @@ type exitCodeError struct{ code int }
 func (e exitCodeError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
 
 // runRun decrypts KindEnv secrets (subject to f), injects them into the child
-// environment, and runs args[0] with args[1:]. Plaintext is zeroed on return.
+// environment, and runs args[0] with args[1:]. The original plaintext byte
+// slices are zeroed via defer before the function returns. The derived Go
+// strings in childEnv share the same logical content and cannot be zeroed
+// without unsafe; they are released to the GC after exec completes.
 // A non-zero child exit code is returned as exitCodeError.
 func runRun(repoRoot string, args []string, kc keychain.Store, f runFilter) error {
 	if !vault.IsInitialized(repoRoot) {

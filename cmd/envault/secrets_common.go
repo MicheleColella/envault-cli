@@ -51,6 +51,7 @@ func loadCurrentUserKey(repoRoot string, kc keychain.Store) (envcrypto.PrivateKe
 		if err != nil {
 			return envcrypto.PrivateKey{}, "", fmt.Errorf("unseal key for %s: %w", r.ID, err)
 		}
+		defer clear(privBytes) // zero the heap allocation returned by kc.Unseal
 		var priv envcrypto.PrivateKey
 		copy(priv[:], privBytes)
 		return priv, r.ID, nil

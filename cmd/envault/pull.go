@@ -140,9 +140,18 @@ func resolveSecretsConflict(repoRoot string) ([]string, error) {
 		return nil, fmt.Errorf("read theirs: %w", err)
 	}
 
-	base := parseStoreOrEmpty(baseData)
-	ours := parseStoreOrEmpty(oursData)
-	theirs := parseStoreOrEmpty(theirsData)
+	base, err := parseStoreOrEmpty(baseData, "merge base")
+	if err != nil {
+		return nil, err
+	}
+	ours, err := parseStoreOrEmpty(oursData, "ours")
+	if err != nil {
+		return nil, err
+	}
+	theirs, err := parseStoreOrEmpty(theirsData, "theirs")
+	if err != nil {
+		return nil, err
+	}
 
 	merged, warnings, entryConflicts := vault.MergeStores(base, ours, theirs)
 	if len(entryConflicts) > 0 {
@@ -170,16 +179,16 @@ func resolveSecretsConflict(repoRoot string) ([]string, error) {
 	return warnMsgs, nil
 }
 
-// parseStoreOrEmpty parses data into a Store, returning an empty store on nil
-// input or parse error. Used when a stage may not exist (e.g., file was
-// newly created on one side of the merge).
-func parseStoreOrEmpty(data []byte) *vault.Store {
+// parseStoreOrEmpty returns an empty Store when data is nil (file absent at
+// that merge stage). For non-nil data a parse failure is surfaced as an error
+// rather than silently discarding secrets.
+func parseStoreOrEmpty(data []byte, stageName string) (*vault.Store, error) {
 	if data == nil {
-		return &vault.Store{Version: 1}
+		return &vault.Store{Version: 1}, nil
 	}
 	s, err := vault.ParseStore(data)
 	if err != nil {
-		return &vault.Store{Version: 1}
+		return nil, fmt.Errorf("parse secrets.enc at stage %q: %w", stageName, err)
 	}
-	return s
+	return s, nil
 }
