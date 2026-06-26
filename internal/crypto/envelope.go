@@ -95,6 +95,39 @@ func Unseal(env *Envelope, privateKey PrivateKey) ([]byte, error) {
 	return plaintext, nil
 }
 
+// Rewrap recovers the DEK from env using privKey, then re-wraps it for the new
+// recipients. The payload ciphertext and nonce are unchanged — only the recipient
+// wrapping list is replaced. Use this when adding or removing a recipient without
+// re-encrypting the payload; for true revocation (new DEK + new ciphertext) use
+// Seal on the decrypted plaintext instead.
+func Rewrap(env *Envelope, privKey PrivateKey, recipients []PublicKey) (*Envelope, error) {
+	if err := validateSuite(env.Suite); err != nil {
+		return nil, err
+	}
+	if len(recipients) == 0 {
+		return nil, fmt.Errorf("at least one recipient required")
+	}
+
+	dek, err := recoverDEK(env, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("recover dek: %w", err)
+	}
+	defer clear(dek)
+
+	blocks, err := wrapDEKForAll(dek, recipients, env.Suite)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Envelope{
+		Version:    env.Version,
+		Suite:      env.Suite,
+		Nonce:      env.Nonce,
+		Ciphertext: env.Ciphertext,
+		Recipients: blocks,
+	}, nil
+}
+
 // envelopeAD builds the authenticated-data string that binds the envelope
 // metadata to the payload ciphertext.
 func envelopeAD(version int, suite CipherSuite) []byte {

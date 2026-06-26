@@ -198,6 +198,135 @@ func TestSeal_NoRecipients(t *testing.T) {
 	}
 }
 
+func TestRewrap_ChangeRecipient(t *testing.T) {
+	// Seal for alice, then rewrap for bob — bob should be able to decrypt.
+	alice, alicePub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair alice: %v", err)
+	}
+	_, bobPub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair bob: %v", err)
+	}
+	bob2, bob2Pub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair bob2: %v", err)
+	}
+
+	payload := []byte("team secret")
+
+	env, err := Seal(payload, []PublicKey{alicePub, bobPub}, AES256GCM)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	// Replace bob with bob2 — alice rewraps.
+	rewrapped, err := Rewrap(env, alice, []PublicKey{alicePub, bob2Pub})
+	if err != nil {
+		t.Fatalf("Rewrap: %v", err)
+	}
+
+	// Ciphertext must be identical (same payload, same nonce).
+	if !bytes.Equal(rewrapped.Ciphertext, env.Ciphertext) {
+		t.Error("Rewrap changed ciphertext — it should not re-encrypt the payload")
+	}
+	if !bytes.Equal(rewrapped.Nonce, env.Nonce) {
+		t.Error("Rewrap changed nonce — it should preserve the payload nonce")
+	}
+	if len(rewrapped.Recipients) != 2 {
+		t.Errorf("Recipients = %d, want 2", len(rewrapped.Recipients))
+	}
+
+	// alice can still decrypt.
+	got, err := Unseal(rewrapped, alice)
+	if err != nil {
+		t.Fatalf("Unseal alice after Rewrap: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Errorf("alice got %q, want %q", got, payload)
+	}
+
+	// bob2 can decrypt.
+	got, err = Unseal(rewrapped, bob2)
+	if err != nil {
+		t.Fatalf("Unseal bob2 after Rewrap: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Errorf("bob2 got %q, want %q", got, payload)
+	}
+}
+
+func TestRewrap_WrongKey(t *testing.T) {
+	_, pub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	env, err := Seal([]byte("secret"), []PublicKey{pub}, AES256GCM)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	wrong, _, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair wrong: %v", err)
+	}
+
+	_, err = Rewrap(env, wrong, []PublicKey{pub})
+	if err == nil {
+		t.Fatal("Rewrap with wrong key should return error")
+	}
+}
+
+func TestRewrap_NoRecipients(t *testing.T) {
+	priv, pub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	env, err := Seal([]byte("secret"), []PublicKey{pub}, AES256GCM)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	_, err = Rewrap(env, priv, []PublicKey{})
+	if err == nil {
+		t.Fatal("Rewrap with no recipients should return error")
+	}
+}
+
+func TestRewrap_AddRecipient(t *testing.T) {
+	// Seal for alice only, then rewrap to add bob.
+	alice, alicePub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair alice: %v", err)
+	}
+	bob, bobPub, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair bob: %v", err)
+	}
+
+	payload := []byte("secret for more people")
+	env, err := Seal(payload, []PublicKey{alicePub}, AES256GCM)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	rewrapped, err := Rewrap(env, alice, []PublicKey{alicePub, bobPub})
+	if err != nil {
+		t.Fatalf("Rewrap: %v", err)
+	}
+	if len(rewrapped.Recipients) != 2 {
+		t.Errorf("Recipients = %d, want 2", len(rewrapped.Recipients))
+	}
+
+	got, err := Unseal(rewrapped, bob)
+	if err != nil {
+		t.Fatalf("Unseal bob: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Errorf("bob got %q, want %q", got, payload)
+	}
+}
+
 func TestSeal_NonceUniqueness(t *testing.T) {
 	_, pub, err := GenerateKeyPair()
 	if err != nil {
