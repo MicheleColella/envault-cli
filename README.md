@@ -33,7 +33,8 @@ make build
 # 2. Initialise a vault in your repo
 envault init
 
-# 3. Generate your identity key (private key stays in your OS keychain)
+# 3. Generate your identity key (sealed in your OS keychain, encrypted at rest
+#    under a passphrase you choose — the key never leaves your machine)
 envault key new --id you@example.com
 
 # 4. Add a secret
@@ -42,9 +43,14 @@ echo "sk-abc123" | envault add OPENAI_KEY
 # 5. Push the encrypted vault to your remote
 envault push
 
-# 6. A teammate pulls and runs their app with secrets injected (coming in v0.6.0)
+# 6. A teammate pulls and runs their app with secrets injected in memory
+envault pull
 envault run -- npm start
 ```
+
+> Reading a key (e.g. `run`, `cat`, `export`) asks for the passphrase that protects
+> it. For non-interactive/CI use, supply it via the `ENVAULT_PASSPHRASE` environment
+> variable (less secure — visible to same-user processes).
 
 ---
 
@@ -66,10 +72,13 @@ envault run -- npm start
 | `envault list` | List all secrets (names only — no plaintext) | ✅ |
 | `envault cat <KEY>` | Decrypt and print a single secret | ✅ |
 | `envault export` | Decrypt all env secrets as `export KEY=value` | ✅ |
+| `envault rotate <KEY>` | Re-seal a secret with a fresh key for current recipients (true revocation) | ✅ |
 | `envault push` | Stage, commit, and push the encrypted vault | ✅ |
 | `envault pull` | Fetch and merge the vault; report changes | ✅ |
-| `envault run -- <cmd>` | Inject secrets in memory and run a command | 🚧 v0.6.0 |
-| `envault hook` | Manage Git and Claude Code hooks | 🚧 v0.7.0 |
+| `envault run [--only/--except] -- <cmd>` | Inject secrets in memory and run a command (0 bytes to disk) | ✅ |
+| `envault exec` | Open `$SHELL` with all env secrets injected | ✅ |
+| `envault hook install --git` | Install a pre-commit hook that blocks secret leaks (`--uninstall` to remove) | ✅ |
+| `envault hook install --claude` | Claude Code / AI-agent integration | 🚧 v0.8.0 |
 
 ---
 
@@ -77,37 +86,41 @@ envault run -- npm start
 
 Envault is designed so that you do not have to trust anyone except your Git remote:
 
-- **End-to-end encryption** — secrets are encrypted on your machine before they are committed. Only recipients with a matching private key can decrypt.
-- **Private keys never leave your machine** — they are sealed in the OS keychain (macOS Keychain or Linux Secret Service) and are never sent anywhere.
+- **End-to-end encryption** — secrets are encrypted on your machine before they are committed. Each secret uses a random data key (AES-256-GCM) wrapped to every recipient's X25519 public key. Only recipients with a matching private key can decrypt.
+- **Private keys never leave your machine** — they are sealed in the OS keychain (macOS Keychain via `security`, Linux kernel keyring via `keyctl`) and are never sent anywhere.
+- **Private keys are encrypted at rest** — the keychain blob is itself encrypted under a passphrase-derived key (Argon2id → AES-256-GCM), so even a process that reads your keychain gets useless ciphertext without your passphrase.
 - **Zero-trust remote** — the Git remote only ever stores ciphertext. Even if the remote is compromised, no secrets are exposed.
 - **No disk writes** — secrets are decrypted in memory and injected directly into the child process. Nothing is written to a temp file.
-- **Per-recipient access control** — adding or removing a teammate from the vault controls who can decrypt. Each secret is independently encrypted for the current recipient set.
+- **Per-recipient access control** — adding or removing a teammate from the vault controls who can decrypt. `rotate` re-seals a secret with a fresh data key for the current recipients, truly revoking a removed member.
+- **Leak prevention** — an optional Git pre-commit hook (`envault hook install --git`) scans the staged diff for `.env` files, private keys, and known API tokens, blocking the commit before a secret ships.
 - **Integrity guaranteed** — ciphertext is authenticated; any tampering is detected and rejected before decryption.
 
 ---
 
 ## Status
 
-Active development — core vault, key management, and Git sync are fully implemented.
-Runtime injection and hook integration are coming next.
+Active development — the full core workflow is implemented end-to-end: init a vault,
+manage keys, add/import secrets, push/pull over Git, and `envault run -- <cmd>` to
+inject secrets in memory. AI-agent integration is the next focus.
 
 | Milestone | Status |
 |---|---|
 | v0.1–0.2 — Scaffold, CI, crypto core | ✅ shipped |
 | v0.3 — Vault init, key management | ✅ shipped |
 | v0.4 — Secret import, add/set/rm, list, cat/export | ✅ shipped |
-| v0.5.0 — Git push / pull | ✅ shipped |
-| v0.5.1 — Recipient re-wrap & rotation | 🔜 next |
-| v0.6.0 — Runtime injection (`envault run`) | planned |
-| v0.7.0 — Git pre-commit hook (leak prevention) | planned |
-| v0.8.0 — Claude Code & AI agent integration | planned |
+| v0.5 — Git push / pull, re-wrap & rotation, conflict merge | ✅ shipped |
+| v0.6 — Runtime injection (`envault run`, `exec`) | ✅ shipped |
+| v0.7.0 — Git pre-commit hook (leak prevention) | ✅ shipped |
+| v0.7.1 — Secret detection rules & allowlist | 🔜 next |
+| v0.8 — Claude Code & AI agent integration | planned |
+| v0.9 — Installer, distribution & clean uninstall | planned |
 | v1.0.0 — Stable release | planned |
 
 ---
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.25+
 - macOS or Linux
 - Git (any version with remote support)
 
