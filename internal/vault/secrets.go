@@ -59,10 +59,35 @@ func LoadStore(repoRoot string) (*Store, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("parse secrets store: %w", err)
 	}
-	if s.Version != storeVersion {
-		return nil, fmt.Errorf("unsupported secrets store version %d", s.Version)
+	if err := migrateStore(&s); err != nil {
+		return nil, err
 	}
 	return &s, nil
+}
+
+// migrateStore upgrades an older on-disk store to the current schema in place, or
+// returns an actionable error. Forward-compatibility contract:
+//   - version > storeVersion: written by a newer envault — fail clearly (upgrade).
+//   - version < storeVersion: older schema — migrate forward here as versions are
+//     added, so upgrading envault never breaks an existing vault.
+//   - version == storeVersion: nothing to do.
+//
+// Today storeVersion is 1, so there is no older schema to migrate yet; the
+// branch is the explicit extension point for future bumps.
+func migrateStore(s *Store) error {
+	switch {
+	case s.Version > storeVersion:
+		return fmt.Errorf(
+			"secrets store version %d is newer than this envault supports (%d) — upgrade envault",
+			s.Version, storeVersion,
+		)
+	case s.Version < storeVersion:
+		// No historical versions exist before v1. When a future version bumps the
+		// schema, add forward migrations here (e.g. case 1: ...; s.Version = 2).
+		return fmt.Errorf("secrets store version %d is not supported by this envault", s.Version)
+	default:
+		return nil
+	}
 }
 
 // SaveStore atomically replaces the secrets store inside repoRoot.

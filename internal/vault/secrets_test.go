@@ -1,11 +1,64 @@
 package vault
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	envcrypto "github.com/MicheleColella/envault-cli/internal/crypto"
 )
+
+// writeRawStore drops a hand-crafted secrets.enc into an initialized vault so a
+// test can exercise LoadStore against a specific on-disk schema version.
+func writeRawStore(t *testing.T, root, json string) {
+	t.Helper()
+	if _, err := Init(root, "", false); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	path := filepath.Join(root, DirName, secretsFile)
+	if err := os.WriteFile(path, []byte(json), 0o600); err != nil {
+		t.Fatalf("write raw store: %v", err)
+	}
+}
+
+// TestLoadStore_NewerVersionRejectedClearly is the forward-compatibility guard:
+// a store written by a NEWER envault must fail with an actionable "upgrade"
+// message, never be parsed as if it were the current schema.
+func TestLoadStore_NewerVersionRejectedClearly(t *testing.T) {
+	root := t.TempDir()
+	writeRawStore(t, root, `{"version":99,"entries":[]}`)
+
+	_, err := LoadStore(root)
+	if err == nil {
+		t.Fatal("expected error loading a newer-version store, got nil")
+	}
+	if !strings.Contains(err.Error(), "upgrade envault") {
+		t.Errorf("error should tell the user to upgrade, got %q", err.Error())
+	}
+}
+
+// TestLoadStore_OlderUnsupportedVersionRejected ensures an out-of-range older
+// schema is rejected (and is the extension point for future migrations).
+func TestLoadStore_OlderUnsupportedVersionRejected(t *testing.T) {
+	root := t.TempDir()
+	writeRawStore(t, root, `{"version":0,"entries":[]}`)
+
+	if _, err := LoadStore(root); err == nil {
+		t.Fatal("expected error loading an unsupported older-version store, got nil")
+	}
+}
+
+// TestLoadStore_CurrentVersionLoads confirms the current schema still loads.
+func TestLoadStore_CurrentVersionLoads(t *testing.T) {
+	root := t.TempDir()
+	writeRawStore(t, root, `{"version":1,"entries":[]}`)
+
+	if _, err := LoadStore(root); err != nil {
+		t.Fatalf("current-version store should load, got %v", err)
+	}
+}
 
 func sealTestEntry(t *testing.T, name string, kind EntryKind, payload string) Entry {
 	t.Helper()
