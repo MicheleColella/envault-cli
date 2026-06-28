@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -47,8 +46,4 @@ func newRootCmd(ver string) *cobra.Command {
 	)
 
 	return cmd
-}
-
-func stubRun(cmd *cobra.Command, _ []string) error {
-	return fmt.Errorf("%s: not implemented yet", cmd.Name())
 }

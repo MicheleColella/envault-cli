@@ -1,0 +1,202 @@
+package hook
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// hookBeginMarker and hookEndMarker delimit the envault-managed block inside the
+// pre-commit hook file. Only the lines between (and including) these markers are
+// touched on install or uninstall — any surrounding content is left intact.
+const (
+	hookBeginMarker = "# --- BEGIN envault pre-commit hook ---"
+	hookEndMarker   = "# --- END envault pre-commit hook ---"
+)
+
+// hookScriptBody is the POSIX-sh script that runs inside the envault block.
+// It scans the staged diff for three high-confidence secret patterns and blocks
+// the commit with an actionable message if any are found.
+const hookScriptBody = `# Envault: block commits that may contain plaintext secrets.
+# Remove with: envault hook install --git --uninstall
+
+_envault_fail() {
+  printf '\033[0;31menvault:\033[0m %s\n' "$1" >&2
+  printf '  Seal it with: envault add <KEY>\n' >&2
+  printf '  To bypass (not recommended): git commit --no-verify\n' >&2
+  exit 1
+}
+
+# Only run inside an envault-managed repo.
+if [ ! -d ".envault" ]; then
+  exit 0
+fi
+
+_staged=$(git diff --cached --name-only 2>/dev/null)
+_diff_adds=$(git diff --cached -U0 2>/dev/null | grep '^+' | grep -v '^+++' || true)
+
+# 1. .env files staged for commit.
+_env_files=$(printf '%s\n' "$_staged" | grep -E '(^|/)\.env(\.[a-zA-Z0-9]+)?$' || true)
+if [ -n "$_env_files" ]; then
+  _envault_fail ".env file staged for commit — use envault to store secrets instead"
+fi
+
+# 2. PEM private key material in the diff.
+if printf '%s\n' "$_diff_adds" | grep -qE '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY'; then
+  _envault_fail "private key material detected in staged diff"
+fi
+
+# 3. High-confidence API token patterns (GitHub, AWS IAM, OpenAI).
+if printf '%s\n' "$_diff_adds" | grep -qE '(ghp_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9]{36}|AKIA[A-Z0-9]{16}|sk-[A-Za-z0-9_-]{32,})'; then
+  _envault_fail "known API token pattern detected in staged diff"
+fi`
+
+// envaultBlock is the complete envault-managed section including both markers.
+var envaultBlock = hookBeginMarker + "\n" + hookScriptBody + "\n" + hookEndMarker + "\n"
+
+// InstallGitHook installs the Envault pre-commit hook in the Git repo at repoRoot.
+//
+//   - If no pre-commit hook exists, a new one is created with a #!/bin/sh shebang.
+//   - If one exists, the Envault block is appended after the existing content.
+//   - If the Envault block is already present, the call is a no-op.
+//
+// The resulting file is always made executable (0755).
+func InstallGitHook(repoRoot string) error {
+	if _, err := os.Stat(filepath.Join(repoRoot, ".git")); errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%s is not a git repository", repoRoot)
+	}
+
+	hooksDir, err := resolveHooksDir(repoRoot)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(hooksDir, 0o750); err != nil {
+		return fmt.Errorf("create hooks dir: %w", err)
+	}
+
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+
+	existing, err := os.ReadFile(hookPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read pre-commit hook: %w", err)
+	}
+	content := string(existing)
+
+	if strings.Contains(content, hookBeginMarker) {
+		return nil // already installed
+	}
+
+	var newContent string
+	if content == "" {
+		newContent = "#!/bin/sh\n" + envaultBlock
+	} else {
+		// Ensure exactly one blank line before the envault block.
+		sep := ""
+		if !strings.HasSuffix(content, "\n") {
+			sep = "\n"
+		}
+		newContent = content + sep + "\n" + envaultBlock
+	}
+
+	if err := os.WriteFile(hookPath, []byte(newContent), 0o755); err != nil { //nolint:gosec // hook scripts must be executable
+		return fmt.Errorf("write pre-commit hook: %w", err)
+	}
+	return nil
+}
+
+// UninstallGitHook removes the Envault block from the pre-commit hook at repoRoot.
+// If the file would be empty (or contain only a shebang) after removal, it is
+// deleted to fully restore the prior state. Returns nil if the hook was not installed.
+func UninstallGitHook(repoRoot string) error {
+	hooksDir, err := resolveHooksDir(repoRoot)
+	if err != nil {
+		return err
+	}
+
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+
+	data, err := os.ReadFile(hookPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil // not installed
+		}
+		return fmt.Errorf("read pre-commit hook: %w", err)
+	}
+
+	stripped := stripEnvaultBlock(string(data))
+
+	trimmed := strings.TrimSpace(stripped)
+	if trimmed == "" || trimmed == "#!/bin/sh" || trimmed == "#!/usr/bin/env sh" {
+		return os.Remove(hookPath)
+	}
+
+	return os.WriteFile(hookPath, []byte(stripped), 0o755) //nolint:gosec // hook scripts must be executable
+}
+
+// IsGitHookInstalled reports whether the Envault block is present in the
+// pre-commit hook for the Git repo at repoRoot.
+func IsGitHookInstalled(repoRoot string) bool {
+	hooksDir, err := resolveHooksDir(repoRoot)
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(hooksDir, "pre-commit"))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), hookBeginMarker)
+}
+
+// resolveHooksDir returns the effective git hooks directory for repoRoot,
+// respecting core.hooksPath if set in the local git config.
+func resolveHooksDir(repoRoot string) (string, error) {
+	out, err := exec.Command("git", "-C", repoRoot, "config", "--local", "core.hooksPath").Output() //nolint:gosec // repoRoot is derived from os.Getwd()
+	if err == nil {
+		if p := strings.TrimSpace(string(out)); p != "" {
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(repoRoot, p)
+			}
+			return p, nil
+		}
+	}
+	return filepath.Join(repoRoot, ".git", "hooks"), nil
+}
+
+// stripEnvaultBlock removes the envault-managed block (BEGIN marker through END
+// marker, inclusive) from content. The blank separator line immediately before
+// the BEGIN marker is also removed so the original surrounding content is restored
+// exactly. Returns the modified content; the original is never mutated.
+func stripEnvaultBlock(content string) string {
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	var lines []string
+	inBlock := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case line == hookBeginMarker:
+			inBlock = true
+			// Remove the blank separator line that precedes the block.
+			if len(lines) > 0 && lines[len(lines)-1] == "" {
+				lines = lines[:len(lines)-1]
+			}
+		case line == hookEndMarker:
+			inBlock = false
+		case !inBlock:
+			lines = append(lines, line)
+		}
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	result := strings.Join(lines, "\n")
+	if !strings.HasSuffix(result, "\n") {
+		result += "\n"
+	}
+	return result
+}

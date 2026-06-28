@@ -29,39 +29,6 @@ func TestRootCommandsRegistered(t *testing.T) {
 	}
 }
 
-func TestStubCommandsReturnError(t *testing.T) {
-	stubs := []string{"hook"}
-	for _, name := range stubs {
-		t.Run(name, func(t *testing.T) {
-			root := newRootCmd("dev")
-			root.SetOut(io.Discard)
-			root.SetErr(io.Discard)
-			root.SetArgs([]string{name})
-			if err := root.Execute(); err == nil {
-				t.Errorf("command %q: expected error, got nil", name)
-			}
-		})
-	}
-}
-
-func TestStubErrorContainsCommandNameAndReason(t *testing.T) {
-	root := newRootCmd("dev")
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"hook"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected error from stub command")
-	}
-	if !strings.Contains(err.Error(), "hook") {
-		t.Errorf("error = %q, want command name 'hook'", err.Error())
-	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Errorf("error = %q, want 'not implemented'", err.Error())
-	}
-}
-
 func TestRootSilencesErrorOutput(t *testing.T) {
 	var errBuf strings.Builder
 	root := newRootCmd("dev")
