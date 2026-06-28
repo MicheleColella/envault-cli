@@ -39,7 +39,7 @@ func newKeyNewCmd() *cobra.Command {
 		Use:   "new",
 		Short: "Generate a new X25519 keypair and seal the private key in the OS keychain",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return err
 			}
@@ -137,7 +137,7 @@ func newKeyExportCmd() *cobra.Command {
 			if !public {
 				return fmt.Errorf("specify --public to export the public key")
 			}
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return err
 			}
@@ -224,7 +224,7 @@ func newKeyDeleteCmd() *cobra.Command {
 		Use:   "delete",
 		Short: "Remove a keypair from the OS keychain (and from .envault/recipients)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return err
 			}

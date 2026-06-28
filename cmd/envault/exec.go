@@ -20,7 +20,7 @@ func newExecCmd() *cobra.Command {
 			"Warning: env vars exported inside this shell persist for its lifetime.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return fmt.Errorf("open keychain: %w", err)
 			}

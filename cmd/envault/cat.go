@@ -21,7 +21,7 @@ func newCatCmd() *cobra.Command {
 			"Requires your private key to be available in the OS keychain.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return err
 			}
@@ -42,7 +42,7 @@ func newExportCmd() *cobra.Command {
 			"A warning is written to stderr; the values go to stdout so they can be piped.\n" +
 			"Requires your private key to be available in the OS keychain.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return err
 			}

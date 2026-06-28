@@ -21,7 +21,7 @@ func newRotateCmd() *cobra.Command {
 			"not invalidate ciphertext that the removed recipient already downloaded.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return fmt.Errorf("open keychain: %w", err)
 			}

@@ -43,7 +43,7 @@ func newRunCmd() *cobra.Command {
 			if len(onlyFlag) > 0 && len(exceptFlag) > 0 {
 				return fmt.Errorf("--only and --except are mutually exclusive")
 			}
-			kc, err := keychain.New()
+			kc, err := openKeychain()
 			if err != nil {
 				return fmt.Errorf("open keychain: %w", err)
 			}

@@ -10,7 +10,6 @@ import (
 
 	envcrypto "github.com/MicheleColella/envault-cli/internal/crypto"
 	"github.com/MicheleColella/envault-cli/internal/git"
-	"github.com/MicheleColella/envault-cli/internal/keychain"
 	"github.com/MicheleColella/envault-cli/internal/ui"
 	"github.com/MicheleColella/envault-cli/internal/vault"
 )
@@ -109,7 +108,7 @@ func maybeRewrapStore(repoRoot string, store *vault.Store, recipients []vault.Re
 	}
 
 	// Open the keychain only when at least one entry needs re-wrapping.
-	kc, err := keychain.New()
+	kc, err := openKeychain()
 	if err != nil {
 		return 0, nil, fmt.Errorf("open keychain: %w", err)
 	}
