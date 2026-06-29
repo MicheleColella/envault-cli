@@ -102,10 +102,8 @@ func TestHookInstallCmd_ClaudeUninstallFlagWorks(t *testing.T) {
 
 // --- hook preuse ---
 
-func TestRunHookPreuse_InjectsClaudeCodeEnv(t *testing.T) {
+func TestRunHookPreuse_AllowsNonSensitiveCommand(t *testing.T) {
 	dir := t.TempDir()
-
-	// Create .envault/ so isEnvaultDir returns true.
 	_ = os.MkdirAll(filepath.Join(dir, ".envault"), 0o700)
 
 	origWd, _ := os.Getwd()
@@ -123,29 +121,72 @@ func TestRunHookPreuse_InjectsClaudeCodeEnv(t *testing.T) {
 	var w bytes.Buffer
 
 	if err := runHookPreuse(r, &w); err != nil {
-		t.Fatalf("runHookPreuse: %v", err)
+		t.Fatalf("expected no error for non-sensitive command, got: %v", err)
 	}
+	if w.Len() != 0 {
+		t.Errorf("expected no output for allowed command, got: %s", w.String())
+	}
+}
 
-	if w.Len() == 0 {
-		t.Fatal("expected output from preuse handler, got nothing")
-	}
+func TestRunHookPreuse_BlocksEnvaultCat(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, ".envault"), 0o700)
 
-	var out map[string]interface{}
-	if err := json.Unmarshal(w.Bytes(), &out); err != nil {
-		t.Fatalf("output not valid JSON: %v — raw: %s", err, w.String())
-	}
+	origWd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
 
-	if out["type"] != "input_replace" {
-		t.Errorf("expected type=input_replace, got %v", out["type"])
-	}
+	for _, cmd := range []string{
+		"envault cat DB_URL",
+		"./envault cat API_KEY",
+		"envault export",
+		"/usr/local/bin/envault cat SECRET",
+	} {
+		input := map[string]interface{}{
+			"tool_name":  "Bash",
+			"tool_input": map[string]interface{}{"command": cmd},
+		}
+		b, _ := json.Marshal(input)
+		r := bytes.NewReader(b)
+		var w bytes.Buffer
 
-	data, _ := out["data"].(map[string]interface{})
-	cmd, _ := data["command"].(string)
-	if !strings.HasPrefix(cmd, "CLAUDE_CODE=1 ") {
-		t.Errorf("expected command to start with CLAUDE_CODE=1, got: %q", cmd)
+		err := runHookPreuse(r, &w)
+		if err == nil {
+			t.Errorf("cmd %q: expected errBlockToolCall, got nil", cmd)
+			continue
+		}
+		if w.Len() == 0 {
+			t.Errorf("cmd %q: expected block reason written to stdout, got nothing", cmd)
+		}
+		if !strings.Contains(w.String(), "envault run") {
+			t.Errorf("cmd %q: block message should mention 'envault run', got: %s", cmd, w.String())
+		}
 	}
-	if !strings.Contains(cmd, "npm install") {
-		t.Errorf("original command not preserved, got: %q", cmd)
+}
+
+func TestRunHookPreuse_AllowsCatWithForce(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, ".envault"), 0o700)
+
+	origWd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	input := map[string]interface{}{
+		"tool_name": "Bash",
+		"tool_input": map[string]interface{}{
+			"command": "envault cat DB_URL --force",
+		},
+	}
+	b, _ := json.Marshal(input)
+	r := bytes.NewReader(b)
+	var w bytes.Buffer
+
+	if err := runHookPreuse(r, &w); err != nil {
+		t.Fatalf("expected no error for cat --force, got: %v", err)
+	}
+	if w.Len() != 0 {
+		t.Errorf("expected no output for cat --force, got: %s", w.String())
 	}
 }
 
@@ -156,10 +197,11 @@ func TestRunHookPreuse_NoopOutsideEnvaultRepo(t *testing.T) {
 	_ = os.Chdir(dir)
 	t.Cleanup(func() { _ = os.Chdir(origWd) })
 
+	// Even a sensitive command is not blocked outside an envault repo.
 	input := map[string]interface{}{
 		"tool_name": "Bash",
 		"tool_input": map[string]interface{}{
-			"command": "echo hello",
+			"command": "envault cat DB_URL",
 		},
 	}
 	b, _ := json.Marshal(input)
@@ -167,7 +209,7 @@ func TestRunHookPreuse_NoopOutsideEnvaultRepo(t *testing.T) {
 	var w bytes.Buffer
 
 	if err := runHookPreuse(r, &w); err != nil {
-		t.Fatalf("runHookPreuse: %v", err)
+		t.Fatalf("expected no error outside envault repo, got: %v", err)
 	}
 	if w.Len() != 0 {
 		t.Errorf("expected no output outside envault repo, got: %s", w.String())
@@ -193,36 +235,10 @@ func TestRunHookPreuse_NoopForNonBashTool(t *testing.T) {
 	var w bytes.Buffer
 
 	if err := runHookPreuse(r, &w); err != nil {
-		t.Fatalf("runHookPreuse: %v", err)
+		t.Fatalf("expected no error for non-Bash tool, got: %v", err)
 	}
 	if w.Len() != 0 {
 		t.Errorf("expected no output for non-Bash tool, got: %s", w.String())
-	}
-}
-
-func TestRunHookPreuse_AlreadyInjected(t *testing.T) {
-	dir := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(dir, ".envault"), 0o700)
-
-	origWd, _ := os.Getwd()
-	_ = os.Chdir(dir)
-	t.Cleanup(func() { _ = os.Chdir(origWd) })
-
-	input := map[string]interface{}{
-		"tool_name": "Bash",
-		"tool_input": map[string]interface{}{
-			"command": "CLAUDE_CODE=1 npm test",
-		},
-	}
-	b, _ := json.Marshal(input)
-	r := bytes.NewReader(b)
-	var w bytes.Buffer
-
-	if err := runHookPreuse(r, &w); err != nil {
-		t.Fatalf("runHookPreuse: %v", err)
-	}
-	if w.Len() != 0 {
-		t.Errorf("expected no output when CLAUDE_CODE=1 already set, got: %s", w.String())
 	}
 }
 
@@ -234,5 +250,34 @@ func TestRunHookPreuse_InvalidJSONIsNoop(t *testing.T) {
 	}
 	if w.Len() != 0 {
 		t.Errorf("expected no output for invalid JSON input, got: %s", w.String())
+	}
+}
+
+func TestIsSensitiveEnvaultCmd(t *testing.T) {
+	sensitive := []string{
+		"envault cat DB_URL",
+		"./envault cat KEY",
+		"/usr/local/bin/envault cat KEY",
+		"envault export",
+		"./envault export",
+	}
+	notSensitive := []string{
+		"envault cat DB_URL --force",
+		"envault list",
+		"envault run -- npm start",
+		"npm install",
+		"echo envault cat",   // envault is not a command here
+		"envault add DB_URL", // not cat/export
+	}
+
+	for _, cmd := range sensitive {
+		if !isSensitiveEnvaultCmd(cmd) {
+			t.Errorf("expected %q to be sensitive, got false", cmd)
+		}
+	}
+	for _, cmd := range notSensitive {
+		if isSensitiveEnvaultCmd(cmd) {
+			t.Errorf("expected %q to NOT be sensitive, got true", cmd)
+		}
 	}
 }
