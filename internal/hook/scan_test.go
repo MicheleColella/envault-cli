@@ -267,7 +267,8 @@ func TestScanDiff_DoesNotFlagRegularFile(t *testing.T) {
 }
 
 func TestScanDiff_SkipsDeletedLines(t *testing.T) {
-	// A deleted line with a token should not trigger.
+	// A deleted line with a token should not trigger. The token below is a synthetic fixture.
+	//nolint:gosec // G101: test fixture — intentionally placing a fake token in a deleted diff line
 	diff := "diff --git a/config.go b/config.go\nindex abc..def 100644\n--- a/config.go\n+++ b/config.go\n@@ -1 +0,0 @@\n-GITHUB_TOKEN=ghp_1234567890123456789012345678901234ab\n"
 	matches := ScanDiff(diff, DefaultRules(), nil)
 	if findByRuleID(matches, "github-pat") != nil {
