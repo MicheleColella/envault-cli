@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// claudeHookCommand is the envault subcommand registered as the PreToolUse hook.
-// It reads the tool-call JSON from stdin and injects CLAUDE_CODE=1 into Bash commands.
-const claudeHookCommand = "envault hook preuse"
-
-// claudeHookID is a stable string we embed in the hook entry so we can find/remove it.
+// claudeHookID is the stable marker embedded in the hook entry so we can find/remove it.
 const claudeHookID = "envault"
 
 // InstallClaudeHook writes a PreToolUse(Bash) hook entry into .claude/settings.json.
+// The hook command uses the absolute path of the current envault binary so Claude Code
+// can find it even when the binary is not on PATH.
 // Existing content is preserved; the function is idempotent.
 func InstallClaudeHook(repoRoot string) error {
 	path := claudeSettingsPath(repoRoot)
@@ -31,7 +30,7 @@ func InstallClaudeHook(repoRoot string) error {
 		return nil
 	}
 
-	addClaudeHook(data)
+	addClaudeHook(data, hookCommand())
 
 	return writeSettings(path, data)
 }
@@ -61,6 +60,22 @@ func IsClaudeHookInstalled(repoRoot string) bool {
 		return false
 	}
 	return isClaudeHookPresent(data)
+}
+
+// hookCommand returns the full shell command to register as the PreToolUse hook.
+// It resolves the absolute path of the running envault binary so Claude Code can
+// invoke it even when the binary is not on PATH (e.g. a local test copy).
+// Falls back to the bare name "envault hook preuse" when the path cannot be resolved.
+func hookCommand() string {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return "envault hook preuse"
+	}
+	real, err := filepath.EvalSymlinks(exe)
+	if err == nil {
+		exe = real
+	}
+	return exe + " hook preuse"
 }
 
 // --- helpers ---
@@ -110,10 +125,10 @@ func isClaudeHookPresent(data map[string]interface{}) bool {
 }
 
 // addClaudeHook appends the envault hook group to PreToolUse.
-func addClaudeHook(data map[string]interface{}) {
+func addClaudeHook(data map[string]interface{}, cmd string) {
 	hooks := hooksMap(data)
 	groups := preToolUseGroups(data)
-	groups = append(groups, envaultHookGroup())
+	groups = append(groups, envaultHookGroup(cmd))
 	hooks["PreToolUse"] = groups
 	data["hooks"] = hooks
 }
@@ -143,15 +158,16 @@ func removeClaudeHook(data map[string]interface{}) {
 	}
 }
 
-// envaultHookGroup returns the map representation of the envault hook group entry.
-func envaultHookGroup() map[string]interface{} {
+// envaultHookGroup returns the settings.json hook-group entry for the given command.
+func envaultHookGroup(cmd string) map[string]interface{} {
 	return map[string]interface{}{
 		"matcher": "Bash",
 		"hooks": []interface{}{
 			map[string]interface{}{
 				"type":    "command",
-				"command": claudeHookCommand,
-				// Stable ID used to locate/remove this entry.
+				"command": cmd,
+				// Stable ID used to locate/remove this entry regardless of the
+				// binary path that was in effect when the hook was installed.
 				"_envault": claudeHookID,
 			},
 		},
@@ -159,6 +175,8 @@ func envaultHookGroup() map[string]interface{} {
 }
 
 // matchesEnvaultGroup returns true when g is the envault-managed hook group.
+// Detection uses the stable _envault marker field as primary signal, with
+// a command-suffix fallback for entries written before path-aware install.
 func matchesEnvaultGroup(g interface{}) bool {
 	m, ok := g.(map[string]interface{})
 	if !ok {
@@ -170,11 +188,13 @@ func matchesEnvaultGroup(g interface{}) bool {
 		if !ok {
 			continue
 		}
+		// Primary: stable marker field (present since v0.8.0).
 		if hm["_envault"] == claudeHookID {
 			return true
 		}
-		// Legacy detection: match by command string.
-		if hm["command"] == claudeHookCommand {
+		// Fallback: match by command suffix for legacy entries without the marker.
+		cmd, _ := hm["command"].(string)
+		if cmd == "envault hook preuse" || strings.HasSuffix(cmd, "/envault hook preuse") {
 			return true
 		}
 	}
