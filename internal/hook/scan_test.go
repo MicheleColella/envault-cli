@@ -156,9 +156,9 @@ func TestShannonEntropy(t *testing.T) {
 
 func TestParseHunkStart(t *testing.T) {
 	cases := []struct {
-		line    string
-		want    int
-		wantOK  bool
+		line   string
+		want   int
+		wantOK bool
 	}{
 		{"@@ -0,0 +1,5 @@", 1, true},
 		{"@@ -1,3 +42,7 @@", 42, true},
