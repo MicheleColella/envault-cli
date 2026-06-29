@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/MicheleColella/envault-cli/internal/hook"
+	"github.com/MicheleColella/envault-cli/internal/scan"
 	"github.com/MicheleColella/envault-cli/internal/ui"
 )
 
@@ -46,23 +46,23 @@ func runScan(repoRoot string, staged, all bool, minSeverityStr string) error {
 		staged = true
 	}
 
-	minSev := hook.ParseSeverity(minSeverityStr)
-	rules := hook.DefaultRules()
+	minSev := scan.ParseSeverity(minSeverityStr)
+	rules := scan.DefaultRules()
 
-	ignored, err := hook.LoadIgnorePatterns(repoRoot)
+	ignored, err := scan.LoadIgnorePatterns(repoRoot)
 	if err != nil {
 		return fmt.Errorf("read .envaultignore: %w", err)
 	}
 
-	var matches []hook.Match
+	var matches []scan.Match
 	if staged {
 		diff, err := getStagedDiff(repoRoot)
 		if err != nil {
 			return err
 		}
-		matches = hook.ScanDiff(diff, rules, ignored)
+		matches = scan.ScanDiff(diff, rules, ignored)
 	} else {
-		matches, err = hook.ScanFiles(repoRoot, rules, ignored)
+		matches, err = scan.ScanFiles(repoRoot, rules, ignored)
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ func runScan(repoRoot string, staged, all bool, minSeverityStr string) error {
 
 	blockingCount := 0
 	for _, m := range matches {
-		if !hook.SeverityAtLeast(m.Severity, minSev) {
+		if !scan.SeverityAtLeast(m.Severity, minSev) {
 			continue
 		}
 		loc := m.File
@@ -78,10 +78,10 @@ func runScan(repoRoot string, staged, all bool, minSeverityStr string) error {
 			loc = fmt.Sprintf("%s:%d", m.File, m.Line)
 		}
 		switch m.Severity {
-		case hook.SeverityCritical, hook.SeverityHigh:
+		case scan.SeverityCritical, scan.SeverityHigh:
 			ui.Fail(fmt.Sprintf("[%s] %s — %s", m.Severity, loc, m.Description))
 			blockingCount++
-		case hook.SeverityMedium:
+		case scan.SeverityMedium:
 			ui.Warn(fmt.Sprintf("[%s] %s — %s", m.Severity, loc, m.Description))
 		}
 		if m.Snippet != "" && m.Snippet != m.File {

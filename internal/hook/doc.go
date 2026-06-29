@@ -1,3 +1,5 @@
-// Package hook installs and manages the Git pre-commit hook and the
-// Claude Code PreToolUse hook used by Envault.
+// Package hook installs and manages integration hooks for Envault:
+// the Git pre-commit hook (git.go), the Claude Code PreToolUse hook (claude.go),
+// and the PreToolUse request handler that blocks sensitive commands (preuse.go).
+// Secret detection rules live in the sibling package internal/scan.
 package hook
