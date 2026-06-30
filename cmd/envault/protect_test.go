@@ -107,4 +107,3 @@ func TestRunProtectRemove_ErrNotFound(t *testing.T) {
 		t.Error("expected error removing nonexistent pattern")
 	}
 }
-
