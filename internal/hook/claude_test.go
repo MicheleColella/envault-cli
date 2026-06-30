@@ -89,6 +89,26 @@ func TestUninstallClaudeHook_NoopWhenNotInstalled(t *testing.T) {
 	}
 }
 
+func TestUninstallClaudeHook_RemovesFileWhenOnlyOurHook(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := InstallClaudeHook(dir, false); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if err := UninstallClaudeHook(dir, false); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	// settings.json was created solely for our hook → it must be gone,
+	// and the (now empty) .claude/ dir removed too.
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "settings.json")); !os.IsNotExist(err) {
+		t.Errorf("settings.json still present after full uninstall (err: %v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude")); !os.IsNotExist(err) {
+		t.Errorf("empty .claude/ dir still present after full uninstall (err: %v)", err)
+	}
+}
+
 func TestInstallClaudeHook_PreservesExistingKeys(t *testing.T) {
 	dir := t.TempDir()
 
@@ -231,7 +251,12 @@ func TestSnapshotSettingsJSON_RoundTrip(t *testing.T) {
 		if err := UninstallClaudeHook(dir, false); err != nil {
 			t.Fatalf("uninstall cycle %d: %v", i, err)
 		}
+		// Our hook was the only content, so uninstall removes the file entirely
+		// (full cleanup). Absence is valid; if present it must still be valid JSON.
 		b, err = os.ReadFile(claudeSettingsPath(dir, false))
+		if os.IsNotExist(err) {
+			continue
+		}
 		if err != nil {
 			t.Fatalf("read settings.json after uninstall cycle %d: %v", i, err)
 		}

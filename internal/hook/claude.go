@@ -50,6 +50,18 @@ func UninstallClaudeHook(repoRoot string, global bool) error {
 	}
 
 	removeClaudeHook(data)
+
+	// If our hook was the only content, don't leave an empty `{}` (or an empty
+	// .claude/ dir) behind — remove the file, its backup, and the dir if empty.
+	// os.Remove on a directory only succeeds when empty, so a .claude/ holding
+	// the user's other config is left untouched.
+	if len(data) == 0 {
+		_ = os.Remove(path)
+		_ = os.Remove(path + ".bak")
+		_ = os.Remove(filepath.Dir(path))
+		return nil
+	}
+
 	return writeSettings(path, data)
 }
 
