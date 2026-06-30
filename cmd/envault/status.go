@@ -13,11 +13,11 @@ import (
 )
 
 type statusResult struct {
-	Initialized          bool `json:"initialized"`
-	Recipients           int  `json:"recipients"`
-	Secrets              int  `json:"secrets"`
-	GitHook              bool `json:"git_hook"`
-	ClaudeHook           bool `json:"claude_hook"`
+	Initialized           bool `json:"initialized"`
+	Recipients            int  `json:"recipients"`
+	Secrets               int  `json:"secrets"`
+	GitHook               bool `json:"git_hook"`
+	ClaudeHook            bool `json:"claude_hook"`
 	PrivacyShieldPatterns int  `json:"privacy_shield_patterns"`
 }
 
