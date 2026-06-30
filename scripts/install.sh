@@ -13,6 +13,19 @@ BINARY="envault"
 err() { echo "envault-install: $*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+if [ "${1:-}" = "--uninstall" ]; then
+  removed=0
+  for d in "${ENVAULT_INSTALL_DIR:-}" /usr/local/bin "$HOME/.local/bin"; do
+    [ -n "$d" ] && [ -f "$d/$BINARY" ] || continue
+    if [ -w "$d" ]; then rm -f "$d/$BINARY"; else sudo rm -f "$d/$BINARY"; fi
+    echo "✓ removed $d/$BINARY"
+    removed=1
+  done
+  [ "$removed" = 1 ] || echo "no $BINARY binary found in known install dirs"
+  echo "! per-repo hooks/keys: run 'envault uninstall [--keys] [--global]' in each repo first"
+  exit 0
+fi
+
 have curl || err "curl is required"
 have tar || err "tar is required"
 

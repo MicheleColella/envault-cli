@@ -110,6 +110,8 @@ envault run -- npm start
 | `envault audit log show/verify` | Show or verify the tamper-evident AI access log | ✅ |
 | `envault status` | Structured health check of the vault, hooks, and shield | ✅ |
 | `envault agent-check` | Verify the AI-agent environment is ready (exit 1 if not) | ✅ |
+| `envault doctor` | Diagnose install state, hooks, keychain, and Git remote (no secrets exposed) | ✅ |
+| `envault uninstall [--keys] [--global]` | Remove all hooks/integrations (`--keys` also clears keychain); `install.sh --uninstall` removes the binary | ✅ |
 
 > Add `--agent-safe` (alias `--json`) to any command for structured JSON output;
 > in this mode `cat`/`export` refuse to print plaintext unless you pass `--force`.
@@ -149,8 +151,8 @@ install from signed cross-platform releases.
 | v0.7 — Git pre-commit hook & secret detection | ✅ shipped |
 | v0.8 — Claude Code & AI agent integration (Privacy Shield) | ✅ shipped |
 | v0.9.0 — Installer & cross-platform signed releases | ✅ shipped |
-| v0.9.1 — Clean uninstall & doctor | 🔜 next |
-| v1.0.0 — Stable release | planned |
+| v0.9.1 — Clean uninstall & doctor | ✅ shipped |
+| v1.0.0 — Stable release | 🔜 next |
 
 ---
 

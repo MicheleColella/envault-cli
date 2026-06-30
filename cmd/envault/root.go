@@ -63,6 +63,8 @@ func newRootCmd(ver string) *cobra.Command {
 		newAuditCmd(),
 		newStatusCmd(),
 		newAgentCheckCmd(),
+		newDoctorCmd(),
+		newUninstallCmd(),
 	)
 
 	return cmd
