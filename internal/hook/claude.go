@@ -29,7 +29,7 @@ func InstallClaudeHook(repoRoot string, global bool) error {
 		return nil
 	}
 
-	addClaudeHook(data, hookCommand())
+	addClaudeHook(data, hookBaseCmd())
 
 	return writeSettings(path, data)
 }
@@ -63,20 +63,20 @@ func IsClaudeHookInstalled(repoRoot string, global bool) bool {
 	return isClaudeHookPresent(data)
 }
 
-// hookCommand returns the full shell command to register as the PreToolUse hook.
-// It resolves the absolute path of the running envault binary so Claude Code can
+// hookBaseCmd returns the `<binary> hook` prefix used to build hook commands.
+// Resolves the absolute path of the running envault binary so Claude Code can
 // invoke it even when the binary is not on PATH (e.g. a local test copy).
-// Falls back to the bare name "envault hook preuse" when the path cannot be resolved.
-func hookCommand() string {
+// Falls back to the bare name "envault hook" when the path cannot be resolved.
+func hookBaseCmd() string {
 	exe, err := os.Executable()
 	if err != nil || exe == "" {
-		return "envault hook preuse"
+		return "envault hook"
 	}
 	real, err := filepath.EvalSymlinks(exe)
 	if err == nil {
 		exe = real
 	}
-	return exe + " hook preuse"
+	return exe + " hook"
 }
 
 // --- helpers ---
@@ -127,10 +127,9 @@ func writeSettings(path string, data map[string]interface{}) error {
 	return nil
 }
 
-// isClaudeHookPresent checks whether the envault hook entry is already in data.
+// isClaudeHookPresent checks whether the envault PreToolUse hook entry is already in data.
 func isClaudeHookPresent(data map[string]interface{}) bool {
-	groups := preToolUseGroups(data)
-	for _, g := range groups {
+	for _, g := range preToolUseGroups(data) {
 		if matchesEnvaultGroup(g) {
 			return true
 		}
@@ -138,31 +137,45 @@ func isClaudeHookPresent(data map[string]interface{}) bool {
 	return false
 }
 
-// addClaudeHook appends the envault hook group to PreToolUse.
+// addClaudeHook appends the envault PreToolUse and PostToolUse hook groups.
 func addClaudeHook(data map[string]interface{}, cmd string) {
 	hooks := hooksMap(data)
-	groups := preToolUseGroups(data)
-	groups = append(groups, envaultHookGroup(cmd))
-	hooks["PreToolUse"] = groups
+
+	pre := preToolUseGroups(data)
+	pre = append(pre, envaultPreHookGroup(cmd))
+	hooks["PreToolUse"] = pre
+
+	post := postToolUseGroups(data)
+	post = append(post, envaultPostHookGroup(cmd))
+	hooks["PostToolUse"] = post
+
 	data["hooks"] = hooks
 }
 
-// removeClaudeHook removes the envault hook group from PreToolUse.
+// removeClaudeHook removes the envault PreToolUse and PostToolUse hook groups.
 func removeClaudeHook(data map[string]interface{}) {
 	hooks := hooksMap(data)
-	groups := preToolUseGroups(data)
 
-	filtered := make([]interface{}, 0, len(groups))
-	for _, g := range groups {
-		if !matchesEnvaultGroup(g) {
-			filtered = append(filtered, g)
+	filterGroups := func(groups []interface{}) []interface{} {
+		out := make([]interface{}, 0, len(groups))
+		for _, g := range groups {
+			if !matchesEnvaultGroup(g) {
+				out = append(out, g)
+			}
 		}
+		return out
 	}
 
-	if len(filtered) == 0 {
+	if pre := filterGroups(preToolUseGroups(data)); len(pre) == 0 {
 		delete(hooks, "PreToolUse")
 	} else {
-		hooks["PreToolUse"] = filtered
+		hooks["PreToolUse"] = pre
+	}
+
+	if post := filterGroups(postToolUseGroups(data)); len(post) == 0 {
+		delete(hooks, "PostToolUse")
+	} else {
+		hooks["PostToolUse"] = post
 	}
 
 	if len(hooks) == 0 {
@@ -172,16 +185,30 @@ func removeClaudeHook(data map[string]interface{}) {
 	}
 }
 
-// envaultHookGroup returns the settings.json hook-group entry for the given command.
-func envaultHookGroup(cmd string) map[string]interface{} {
+// envaultPreHookGroup returns the PreToolUse hook group entry.
+// matcher ".*" intercepts all tools so protected-path blocking covers Read/Write/Edit
+// as well as Bash. The handler routes by tool_name internally.
+func envaultPreHookGroup(cmd string) map[string]interface{} {
 	return map[string]interface{}{
-		"matcher": "Bash",
+		"matcher": ".*",
 		"hooks": []interface{}{
 			map[string]interface{}{
-				"type":    "command",
-				"command": cmd,
-				// Stable ID used to locate/remove this entry regardless of the
-				// binary path that was in effect when the hook was installed.
+				"type":     "command",
+				"command":  cmd + " preuse",
+				"_envault": claudeHookID,
+			},
+		},
+	}
+}
+
+// envaultPostHookGroup returns the PostToolUse hook group entry for placeholder injection.
+func envaultPostHookGroup(cmd string) map[string]interface{} {
+	return map[string]interface{}{
+		"matcher": ".*",
+		"hooks": []interface{}{
+			map[string]interface{}{
+				"type":     "command",
+				"command":  cmd + " postuse",
 				"_envault": claudeHookID,
 			},
 		},
@@ -208,7 +235,10 @@ func matchesEnvaultGroup(g interface{}) bool {
 		}
 		// Fallback: match by command suffix for legacy entries without the marker.
 		cmd, _ := hm["command"].(string)
-		if cmd == "envault hook preuse" || strings.HasSuffix(cmd, "/envault hook preuse") {
+		if strings.HasSuffix(cmd, "/envault hook preuse") ||
+			strings.HasSuffix(cmd, "/envault hook postuse") ||
+			cmd == "envault hook preuse" ||
+			cmd == "envault hook postuse" {
 			return true
 		}
 	}
@@ -229,8 +259,17 @@ func hooksMap(data map[string]interface{}) map[string]interface{} {
 
 // preToolUseGroups returns the PreToolUse array from hooks, or nil if absent.
 func preToolUseGroups(data map[string]interface{}) []interface{} {
+	return hookGroups(data, "PreToolUse")
+}
+
+// postToolUseGroups returns the PostToolUse array from hooks, or nil if absent.
+func postToolUseGroups(data map[string]interface{}) []interface{} {
+	return hookGroups(data, "PostToolUse")
+}
+
+func hookGroups(data map[string]interface{}, key string) []interface{} {
 	hooks := hooksMap(data)
-	v, ok := hooks["PreToolUse"]
+	v, ok := hooks[key]
 	if !ok {
 		return nil
 	}

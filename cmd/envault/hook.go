@@ -18,6 +18,7 @@ func newHookCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newHookInstallCmd())
 	cmd.AddCommand(newHookPreuseCmd())
+	cmd.AddCommand(newHookPostuseCmd())
 	return cmd
 }
 
@@ -139,6 +140,24 @@ func runHookUninstallClaude(repoRoot string, global bool) error {
 	}
 	ui.OK("Claude Code hook removed")
 	return nil
+}
+
+// newHookPostuseCmd returns the hidden PostToolUse hook handler for placeholder injection.
+func newHookPostuseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:           "postuse",
+		Short:         "Claude Code PostToolUse hook handler (internal)",
+		Hidden:        true,
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			err := hook.RunHookPostuse(os.Stdin, os.Stdout)
+			if err != nil {
+				os.Exit(2)
+			}
+			return nil
+		},
+	}
 }
 
 // newHookPreuseCmd returns the hidden PreToolUse hook handler invoked by Claude Code.

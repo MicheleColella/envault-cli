@@ -6,9 +6,12 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/MicheleColella/envault-cli/internal/audit"
+	"github.com/MicheleColella/envault-cli/internal/protect"
 )
 
-// ErrBlockToolCall is returned by RunHookPreuse when the Bash command must be
+// ErrBlockToolCall is returned by RunHookPreuse when the tool call must be
 // blocked. The caller must exit non-zero so Claude Code denies the tool call —
 // any text already written to the output writer is shown to Claude as the reason.
 var ErrBlockToolCall = fmt.Errorf("tool call blocked by envault hook")
@@ -19,18 +22,57 @@ type PreuseInput struct {
 	ToolInput map[string]interface{} `json:"tool_input"`
 }
 
+// filePathTools are tools whose primary target is a file accessible via file_path.
+// NotebookEdit uses notebook_path instead — handled separately.
+var filePathTools = map[string]string{
+	"Read":         "file_path",
+	"Write":        "file_path",
+	"Edit":         "file_path",
+	"MultiEdit":    "file_path",
+	"NotebookEdit": "notebook_path",
+}
+
 // RunHookPreuse reads Claude Code's PreToolUse JSON from r.
-// When a Bash command in an envault repo invokes `envault cat` or `envault export`
-// without --force, it writes a human-readable block reason to w and returns
-// ErrBlockToolCall. The caller must then exit non-zero so Claude Code denies the
-// tool use and shows the message to Claude instead.
-// For all other commands it returns nil (tool call is allowed unchanged).
+//
+// Blocking rules (in priority order):
+//  1. Read/Write/Edit/NotebookEdit tools whose file_path matches a protected pattern.
+//  2. Bash commands that reference a protected path (best-effort heuristic; full
+//     adversarial coverage is in v0.8.4).
+//  3. Bash commands that invoke `envault cat` or `envault export` without --force.
+//
+// Each blocked call is appended to the audit log (.envault/ai-secure.log).
+// Returns ErrBlockToolCall when a call is denied; nil otherwise.
 func RunHookPreuse(r io.Reader, w io.Writer) error {
 	var input PreuseInput
 	if err := json.NewDecoder(r).Decode(&input); err != nil {
-		return nil // non-fatal: allow the tool call unchanged
+		return nil // non-fatal: allow unchanged
 	}
 
+	wd, err := os.Getwd()
+	if err != nil || !IsEnvaultDir(wd) {
+		return nil
+	}
+
+	patterns, _ := protect.LoadPatterns(wd) // ignore error: no patterns = no blocking
+
+	// --- File tool protection ---
+	if paramKey, isFileTool := filePathTools[input.ToolName]; isFileTool {
+		filePath, _ := input.ToolInput[paramKey].(string)
+		if filePath != "" && len(patterns) > 0 {
+			if matched, ok := protect.MatchesAny(filePath, patterns); ok {
+				_ = audit.AppendEntry(wd, input.ToolName, audit.ActionBlockedPath, filePath, matched)
+				_, _ = fmt.Fprintf(w,
+					"[ENVAULT PROTECTED: %s — file contents encrypted. Use `envault run` to access at runtime.]\n"+
+						"Pattern: %s",
+					filePath, matched,
+				)
+				return ErrBlockToolCall
+			}
+		}
+		return nil
+	}
+
+	// --- Bash tool ---
 	if input.ToolName != "Bash" {
 		return nil
 	}
@@ -40,12 +82,20 @@ func RunHookPreuse(r io.Reader, w io.Writer) error {
 		return nil
 	}
 
-	// Only intercept when inside an envault repo.
-	wd, err := os.Getwd()
-	if err != nil || !IsEnvaultDir(wd) {
-		return nil
+	// Protected path check in Bash command.
+	if len(patterns) > 0 {
+		if matched, tok, ok := protect.ContainsProtectedPath(cmd, patterns); ok {
+			_ = audit.AppendEntry(wd, "Bash", audit.ActionBlockedCmd, snippetOf(cmd, 120), matched)
+			_, _ = fmt.Fprintf(w,
+				"[ENVAULT PROTECTED: %s — path matches protected pattern %q. Use `envault run` to access at runtime.]\n"+
+					"Blocked command: %s",
+				tok, matched, snippetOf(cmd, 200),
+			)
+			return ErrBlockToolCall
+		}
 	}
 
+	// envault cat / export without --force.
 	if IsSensitiveEnvaultCmd(cmd) {
 		_, _ = fmt.Fprintln(w,
 			"envault: plaintext output blocked — secrets must not appear in the model context.\n"+
@@ -74,7 +124,6 @@ func IsSensitiveEnvaultCmd(cmd string) bool {
 		return false
 	}
 
-	// Only match when envault is the first executable token.
 	first := fields[start]
 	if first != "envault" && !strings.HasSuffix(first, "/envault") {
 		return false
@@ -101,4 +150,11 @@ func IsSensitiveEnvaultCmd(cmd string) bool {
 func IsEnvaultDir(root string) bool {
 	_, err := os.Stat(root + "/.envault")
 	return err == nil
+}
+
+func snippetOf(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }

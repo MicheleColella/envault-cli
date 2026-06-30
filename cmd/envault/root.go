@@ -56,6 +56,8 @@ func newRootCmd(ver string) *cobra.Command {
 		newExecCmd(),
 		newHookCmd(),
 		newScanCmd(),
+		newProtectCmd(),
+		newAuditCmd(),
 	)
 
 	return cmd
