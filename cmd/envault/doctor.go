@@ -89,7 +89,7 @@ func runDoctor(repoRoot string) error {
 	ui.Info(fmt.Sprintf("  Secrets                  %d", res.Secrets))
 	ui.Info(fmt.Sprintf("  Git hook                 %s", check(res.GitHook)))
 	ui.Info(fmt.Sprintf("  Privacy Shield patterns  %d", res.PrivacyShield))
-	ui.Info("  Claude Code              install the Envault plugin (/plugin install envault@envault)")
+	ui.Info("  Claude Code              install the Envault plugin (" + pluginInstallHint + ")")
 	return nil
 }
 

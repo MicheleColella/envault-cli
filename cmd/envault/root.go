@@ -8,6 +8,10 @@ import (
 	"github.com/MicheleColella/envault-cli/internal/ui"
 )
 
+// pluginInstallHint is the marketplace install command shown by doctor/agent-check.
+// Single source of truth so a marketplace/plugin rename is a one-line change.
+const pluginInstallHint = "/plugin install envault@envault"
+
 func Execute(ver string) {
 	root := newRootCmd(ver)
 	if err := root.Execute(); err != nil {

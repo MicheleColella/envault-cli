@@ -24,7 +24,7 @@ func newAgentCheckCmd() *cobra.Command {
 			"  - Privacy Shield patterns (protects sensitive paths)\n" +
 			"  - Output masking (ENVAULT_PASSPHRASE set for PostToolUse)\n\n" +
 			"The PreToolUse/PostToolUse hooks ship with the Envault Claude Code plugin\n" +
-			"(/plugin install envault@envault) — enablement is managed by Claude Code,\n" +
+			"(" + pluginInstallHint + ") — enablement is managed by Claude Code,\n" +
 			"not detectable here.\n\n" +
 			"Exits 0 when all checks pass; exits 1 otherwise.",
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -80,7 +80,7 @@ func runAgentCheck(repoRoot string) error {
 		hint(res.PrivacyShield, "run: envault protect add <path>")))
 	ui.Info(fmt.Sprintf("  Output masking     %s%s", icon(res.OutputMasking),
 		hint(res.OutputMasking, "set ENVAULT_PASSPHRASE in your shell or Claude Code env")))
-	ui.Info("  Claude Code hook   ships with the plugin (/plugin install envault@envault)")
+	ui.Info("  Claude Code hook   ships with the plugin (" + pluginInstallHint + ")")
 
 	if !res.Ready {
 		return fmt.Errorf("agent environment not fully configured")
