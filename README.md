@@ -61,8 +61,11 @@ Claude the vault workflow, all enabled per-project (never globally by default).
 
 ```text
 /plugin marketplace add MicheleColella/envault-cli
-/plugin install envault
+/plugin install envault@envault
 ```
+
+`envault@envault` is `<plugin>@<marketplace>` — both are named `envault` in
+[`marketplace.json`](.claude-plugin/marketplace.json).
 
 Enabling the plugin is reversible (`/plugin uninstall envault`) and scoped via
 `.claude/settings.json` (`enabledPlugins`). The plugin is **additive** — the CLI
