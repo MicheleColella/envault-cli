@@ -176,7 +176,9 @@ install from signed cross-platform releases.
 | v0.8 — Claude Code & AI agent integration (Privacy Shield) | ✅ shipped |
 | v0.9.0 — Installer & cross-platform signed releases | ✅ shipped |
 | v0.9.1 — Clean uninstall & doctor | ✅ shipped |
-| v1.0.0 — Stable release | 🔜 next |
+| v0.9.2 — Claude Code plugin & marketplace distribution | ✅ shipped |
+| v0.9.3 — Embedded MCP server (Claude Code native protocol) | 🔜 next |
+| v1.0.0 — Stable release | planned |
 
 ---
 
