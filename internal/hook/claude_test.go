@@ -210,6 +210,63 @@ func TestInstallClaudeHook_CreatesBackup(t *testing.T) {
 	}
 }
 
+// TestSnapshotSettingsJSON verifies that repeated install/uninstall cycles
+// never leave settings.json in an invalid or corrupted state.
+func TestSnapshotSettingsJSON_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	for i := range 3 {
+		if err := InstallClaudeHook(dir, false); err != nil {
+			t.Fatalf("install cycle %d: %v", i, err)
+		}
+		b, err := os.ReadFile(claudeSettingsPath(dir, false))
+		if err != nil {
+			t.Fatalf("read settings.json cycle %d: %v", i, err)
+		}
+		var data map[string]interface{}
+		if err := json.Unmarshal(b, &data); err != nil {
+			t.Fatalf("settings.json invalid JSON after install cycle %d: %v\n%s", i, err, b)
+		}
+
+		if err := UninstallClaudeHook(dir, false); err != nil {
+			t.Fatalf("uninstall cycle %d: %v", i, err)
+		}
+		b, err = os.ReadFile(claudeSettingsPath(dir, false))
+		if err != nil {
+			t.Fatalf("read settings.json after uninstall cycle %d: %v", i, err)
+		}
+		if err := json.Unmarshal(b, &data); err != nil {
+			t.Fatalf("settings.json invalid JSON after uninstall cycle %d: %v\n%s", i, err, b)
+		}
+	}
+}
+
+// TestInstallClaudeHook_ToleratesMalformedJSON verifies that installing into a
+// settings.json that contains malformed JSON does not silently produce a
+// corrupted file — it should return an error, not write garbage.
+func TestInstallClaudeHook_ToleratesMalformedJSON(t *testing.T) {
+	dir := t.TempDir()
+	clDir := filepath.Join(dir, ".claude")
+	_ = os.MkdirAll(clDir, 0o700)
+	_ = os.WriteFile(filepath.Join(clDir, "settings.json"), []byte("{broken json}"), 0o600)
+
+	err := InstallClaudeHook(dir, false)
+	if err != nil {
+		// Error is the correct behaviour — don't corrupt.
+		return
+	}
+
+	// If it succeeded, the file must be valid JSON.
+	b, readErr := os.ReadFile(filepath.Join(clDir, "settings.json"))
+	if readErr != nil {
+		t.Fatalf("read settings.json: %v", readErr)
+	}
+	var data map[string]interface{}
+	if jsonErr := json.Unmarshal(b, &data); jsonErr != nil {
+		t.Errorf("settings.json corrupted after install into malformed file: %v\n%s", jsonErr, b)
+	}
+}
+
 func TestInstallClaudeHook_GlobalUsesHomeDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

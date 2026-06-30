@@ -136,7 +136,7 @@ func tokenize(text string) []string {
 	replacer := strings.NewReplacer(
 		"\"", " ", "'", " ", ";", " ", "|", " ", "&", " ",
 		"(", " ", ")", " ", "<", " ", ">", " ", "`", " ",
-		"$", " ", "{", " ", "}", " ", "=", " ",
+		"$", " ", "{", " ", "}", " ", "=", " ", ":", " ",
 	)
 	normalized := replacer.Replace(text)
 	raw := strings.Fields(normalized)
