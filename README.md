@@ -24,26 +24,52 @@ No new infrastructure required.
 
 ---
 
+## Install
+
+**One-line install** (macOS / Linux, amd64 / arm64) — downloads the latest signed
+release, verifies its checksum, and drops `envault` on your `PATH`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MicheleColella/envault-cli/main/scripts/install.sh | sh
+```
+
+Override the target with `ENVAULT_VERSION=v0.9.0` or `ENVAULT_INSTALL_DIR=~/.local/bin`.
+
+**With Go** (any platform Go supports):
+
+```sh
+go install github.com/MicheleColella/envault-cli/cmd/envault@latest
+```
+
+**From source:**
+
+```sh
+make build && sudo make install   # builds ./envault and installs to /usr/local/bin
+```
+
+Releases are cross-compiled in CI and published to [GitHub Releases](https://github.com/MicheleColella/envault-cli/releases)
+with a `checksums.txt` signed via keyless [cosign](https://github.com/sigstore/cosign).
+Windows binaries are not yet published (pending a Windows keychain backend).
+
+---
+
 ## Quick start
 
 ```sh
-# 1. Build
-make build
-
-# 2. Initialise a vault in your repo
+# 1. Initialise a vault in your repo
 envault init
 
-# 3. Generate your identity key (sealed in your OS keychain, encrypted at rest
+# 2. Generate your identity key (sealed in your OS keychain, encrypted at rest
 #    under a passphrase you choose — the key never leaves your machine)
 envault key new --id you@example.com
 
-# 4. Add a secret
+# 3. Add a secret
 echo "sk-abc123" | envault add OPENAI_KEY
 
-# 5. Push the encrypted vault to your remote
+# 4. Push the encrypted vault to your remote
 envault push
 
-# 6. A teammate pulls and runs their app with secrets injected in memory
+# 5. A teammate pulls and runs their app with secrets injected in memory
 envault pull
 envault run -- npm start
 ```
@@ -100,8 +126,9 @@ Envault is designed so that you do not have to trust anyone except your Git remo
 ## Status
 
 Active development — the full core workflow is implemented end-to-end: init a vault,
-manage keys, add/import secrets, push/pull over Git, and `envault run -- <cmd>` to
-inject secrets in memory. AI-agent integration is the next focus.
+manage keys, add/import secrets, push/pull over Git, `envault run -- <cmd>` to inject
+secrets in memory, AI-agent integration (Claude Code Privacy Shield), and one-line
+install from signed cross-platform releases.
 
 | Milestone | Status |
 |---|---|
@@ -110,10 +137,10 @@ inject secrets in memory. AI-agent integration is the next focus.
 | v0.4 — Secret import, add/set/rm, list, cat/export | ✅ shipped |
 | v0.5 — Git push / pull, re-wrap & rotation, conflict merge | ✅ shipped |
 | v0.6 — Runtime injection (`envault run`, `exec`) | ✅ shipped |
-| v0.7.0 — Git pre-commit hook (leak prevention) | ✅ shipped |
-| v0.7.1 — Secret detection rules & allowlist | 🔜 next |
-| v0.8 — Claude Code & AI agent integration | planned |
-| v0.9 — Installer, distribution & clean uninstall | planned |
+| v0.7 — Git pre-commit hook & secret detection | ✅ shipped |
+| v0.8 — Claude Code & AI agent integration (Privacy Shield) | ✅ shipped |
+| v0.9.0 — Installer & cross-platform signed releases | ✅ shipped |
+| v0.9.1 — Clean uninstall & doctor | 🔜 next |
 | v1.0.0 — Stable release | planned |
 
 ---

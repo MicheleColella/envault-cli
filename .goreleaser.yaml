@@ -1,0 +1,57 @@
+# GoReleaser config — cross-compile + checksums + cosign-signed GitHub Releases.
+# Docs: https://goreleaser.com  ·  Validate locally: `goreleaser check`
+version: 2
+
+project_name: envault
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: envault
+    main: ./cmd/envault
+    binary: envault
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -buildvcs=false
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # ponytail: darwin/linux only — Windows needs a keychain.New backend (DPAPI)
+    # that doesn't exist yet; a binary that crashes on every key op is worse than
+    # none. Add `windows` here once internal/keychain has a Windows implementation.
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: envault
+    formats: [tar.gz]
+    # Must match the name install.sh reconstructs: envault_<ver>_<os>_<arch>.tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+# Keyless cosign signature over checksums.txt (no secrets — uses GitHub OIDC in CI).
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+
+release:
+  github:
+    owner: MicheleColella
+    name: envault-cli
+  draft: false
+
+changelog:
+  use: github
+  sort: asc
