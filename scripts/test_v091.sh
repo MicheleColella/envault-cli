@@ -60,6 +60,12 @@ if grep -q "envault" .git/hooks/pre-commit 2>/dev/null; then
 else
   pass "git hook block removed"
 fi
+# uninstall also removes the .envault/ vault directory (undoes init)
+if [ -d .envault ]; then
+  fail ".envault/ directory still present after uninstall"
+else
+  pass "envault uninstall removes .envault/ directory"
+fi
 
 # --- uninstall is idempotent ---
 out=$("$ENVAULT" uninstall 2>/dev/null)

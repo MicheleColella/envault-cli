@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -19,9 +20,10 @@ func newUninstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove all Envault integrations (hooks, CLAUDE.md); --keys also clears keychain",
-		Long: "Reverses every system integration Envault installed, leaving the host as before.\n\n" +
-			"Removes: Git pre-commit hook, project Claude Code hook, the Envault CLAUDE.md section.\n" +
+		Short: "Remove everything Envault added: the .envault/ vault, hooks, CLAUDE.md (--keys also clears keychain)",
+		Long: "Reverses init and every integration Envault installed, leaving the host as before.\n\n" +
+			"Removes: the .envault/ vault directory, the Git pre-commit hook, the project\n" +
+			"Claude Code hook, and the Envault CLAUDE.md section.\n" +
 			"  --global  also remove the global Claude Code hook (~/.claude/settings.json)\n" +
 			"  --keys    also delete this machine's vault keys from the OS keychain (IRREVERSIBLE)\n\n" +
 			"Idempotent and safe to run repeatedly. Does not delete the envault binary —\n" +
@@ -72,6 +74,8 @@ func runUninstall(repoRoot string, removeKeys, global bool) error {
 		removed = append(removed, "Claude Code hook (global)")
 	}
 
+	// Keys must be cleared before the vault dir is removed: removeVaultKeys
+	// reads the recipient list from .envault/recipients.
 	if removeKeys {
 		n, err := removeVaultKeys(repoRoot)
 		if err != nil {
@@ -81,6 +85,17 @@ func runUninstall(repoRoot string, removeKeys, global bool) error {
 		}
 	}
 
+	// Remove the local vault directory, undoing `envault init`.
+	// ponytail: working-tree only — if .envault/ was committed, git still has it
+	// (shows as a deletion); recover with `git checkout .envault`.
+	vaultDir := filepath.Join(repoRoot, vault.DirName)
+	if _, err := os.Stat(vaultDir); err == nil {
+		if err := os.RemoveAll(vaultDir); err != nil {
+			return fmt.Errorf("remove %s: %w", vault.DirName, err)
+		}
+		removed = append(removed, vault.DirName+"/ directory")
+	}
+
 	if len(removed) == 0 {
 		ui.OK("Nothing to remove — host is already clean")
 		return nil
@@ -88,7 +103,7 @@ func runUninstall(repoRoot string, removeKeys, global bool) error {
 	for _, r := range removed {
 		ui.Info("removed " + r)
 	}
-	ui.OK("Envault integrations removed")
+	ui.OK("Envault removed from this repo")
 	ui.Info("Binary not deleted — run scripts/install.sh --uninstall or rm it manually")
 	return nil
 }

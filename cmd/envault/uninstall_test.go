@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/MicheleColella/envault-cli/internal/hook"
 	"github.com/MicheleColella/envault-cli/internal/ui"
+	"github.com/MicheleColella/envault-cli/internal/vault"
 )
 
 func TestRunUninstall_CleanHostIsNoop(t *testing.T) {
@@ -51,5 +53,22 @@ func TestRunUninstall_RemovesGitHookAndIsIdempotent(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "already clean") {
 		t.Errorf("expected 'already clean' on second run, got %q", out.String())
+	}
+}
+
+func TestRunUninstall_RemovesVaultDirectory(t *testing.T) {
+	root := initVaultRoot(t) // creates .envault/
+
+	ui.Out = &bytes.Buffer{}
+	t.Cleanup(func() { ui.Out = os.Stdout })
+
+	if err := runUninstall(root, false, false); err != nil {
+		t.Fatalf("runUninstall: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, vault.DirName)); !os.IsNotExist(err) {
+		t.Errorf("%s/ still present after uninstall (stat err: %v)", vault.DirName, err)
+	}
+	if vault.IsInitialized(root) {
+		t.Error("vault still reported initialized after uninstall")
 	}
 }
