@@ -11,12 +11,11 @@ import (
 // claudeHookID is the stable marker embedded in the hook entry so we can find/remove it.
 const claudeHookID = "envault"
 
-// InstallClaudeHook writes a PreToolUse(Bash) hook entry into .claude/settings.json.
-// The hook command uses the absolute path of the current envault binary so Claude Code
-// can find it even when the binary is not on PATH.
-// Existing content is preserved; the function is idempotent.
-func InstallClaudeHook(repoRoot string) error {
-	path := claudeSettingsPath(repoRoot)
+// InstallClaudeHook writes a PreToolUse(Bash) hook entry into settings.json.
+// When global is true, writes to ~/.claude/settings.json; otherwise writes to
+// <repoRoot>/.claude/settings.json. Existing content is preserved; idempotent.
+func InstallClaudeHook(repoRoot string, global bool) error {
+	path := claudeSettingsPath(repoRoot, global)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create .claude directory: %w", err)
 	}
@@ -35,10 +34,11 @@ func InstallClaudeHook(repoRoot string) error {
 	return writeSettings(path, data)
 }
 
-// UninstallClaudeHook removes the envault PreToolUse hook from .claude/settings.json.
-// Returns nil when the hook was not installed or the file does not exist.
-func UninstallClaudeHook(repoRoot string) error {
-	path := claudeSettingsPath(repoRoot)
+// UninstallClaudeHook removes the envault PreToolUse hook from settings.json.
+// When global is true, targets ~/.claude/settings.json. Returns nil when the
+// hook was not installed or the file does not exist.
+func UninstallClaudeHook(repoRoot string, global bool) error {
+	path := claudeSettingsPath(repoRoot, global)
 
 	data, err := readSettings(path)
 	if err != nil {
@@ -54,8 +54,9 @@ func UninstallClaudeHook(repoRoot string) error {
 }
 
 // IsClaudeHookInstalled reports whether the envault hook is present in settings.json.
-func IsClaudeHookInstalled(repoRoot string) bool {
-	data, err := readSettings(claudeSettingsPath(repoRoot))
+// When global is true, checks ~/.claude/settings.json.
+func IsClaudeHookInstalled(repoRoot string, global bool) bool {
+	data, err := readSettings(claudeSettingsPath(repoRoot, global))
 	if err != nil {
 		return false
 	}
@@ -80,7 +81,16 @@ func hookCommand() string {
 
 // --- helpers ---
 
-func claudeSettingsPath(repoRoot string) string {
+// claudeSettingsPath returns the target settings.json path.
+// When global is true, returns ~/.claude/settings.json.
+func claudeSettingsPath(repoRoot string, global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "~"
+		}
+		return filepath.Join(home, ".claude", "settings.json")
+	}
 	return filepath.Join(repoRoot, ".claude", "settings.json")
 }
 
@@ -106,6 +116,10 @@ func writeSettings(path string, data map[string]interface{}) error {
 	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal settings.json: %w", err)
+	}
+	// Backup the previous file before overwriting.
+	if prev, err := os.ReadFile(path); err == nil {
+		_ = os.WriteFile(path+".bak", prev, 0o600)
 	}
 	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write settings.json: %w", err)

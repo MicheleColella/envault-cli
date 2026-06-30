@@ -10,7 +10,7 @@ import (
 func TestInstallClaudeHook_WritesSettingsFile(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("InstallClaudeHook: %v", err)
 	}
 
@@ -29,15 +29,15 @@ func TestInstallClaudeHook_WritesSettingsFile(t *testing.T) {
 func TestInstallClaudeHook_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
 
 	// Ensure there is exactly one envault hook group in PreToolUse.
-	data, _ := readSettings(claudeSettingsPath(dir))
+	data, _ := readSettings(claudeSettingsPath(dir, false))
 	groups := preToolUseGroups(data)
 	count := 0
 	for _, g := range groups {
@@ -52,17 +52,17 @@ func TestInstallClaudeHook_Idempotent(t *testing.T) {
 
 func TestIsClaudeHookInstalled_FalseBeforeInstall(t *testing.T) {
 	dir := t.TempDir()
-	if IsClaudeHookInstalled(dir) {
+	if IsClaudeHookInstalled(dir, false) {
 		t.Error("expected false before install")
 	}
 }
 
 func TestIsClaudeHookInstalled_TrueAfterInstall(t *testing.T) {
 	dir := t.TempDir()
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("InstallClaudeHook: %v", err)
 	}
-	if !IsClaudeHookInstalled(dir) {
+	if !IsClaudeHookInstalled(dir, false) {
 		t.Error("expected true after install")
 	}
 }
@@ -70,21 +70,21 @@ func TestIsClaudeHookInstalled_TrueAfterInstall(t *testing.T) {
 func TestUninstallClaudeHook_RemovesEntry(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if err := UninstallClaudeHook(dir); err != nil {
+	if err := UninstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
 
-	if IsClaudeHookInstalled(dir) {
+	if IsClaudeHookInstalled(dir, false) {
 		t.Error("hook still reported as installed after uninstall")
 	}
 }
 
 func TestUninstallClaudeHook_NoopWhenNotInstalled(t *testing.T) {
 	dir := t.TempDir()
-	if err := UninstallClaudeHook(dir); err != nil {
+	if err := UninstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("uninstall on clean dir: %v", err)
 	}
 }
@@ -111,11 +111,11 @@ func TestInstallClaudeHook_PreservesExistingKeys(t *testing.T) {
 	b, _ := json.MarshalIndent(existing, "", "  ")
 	_ = os.WriteFile(filepath.Join(clDir, "settings.json"), b, 0o600)
 
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("InstallClaudeHook: %v", err)
 	}
 
-	data, err := readSettings(claudeSettingsPath(dir))
+	data, err := readSettings(claudeSettingsPath(dir, false))
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestInstallClaudeHook_PreservesExistingKeys(t *testing.T) {
 	}
 
 	// Envault PreToolUse hook must also be present.
-	if !IsClaudeHookInstalled(dir) {
+	if !IsClaudeHookInstalled(dir, false) {
 		t.Error("envault hook not installed after merge")
 	}
 }
@@ -141,12 +141,12 @@ func TestUninstallClaudeHook_LeavesOtherHooksIntact(t *testing.T) {
 	dir := t.TempDir()
 
 	// Install envault + add another pre-tool-use group.
-	if err := InstallClaudeHook(dir); err != nil {
+	if err := InstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 
 	// Inject a second PreToolUse group manually.
-	path := claudeSettingsPath(dir)
+	path := claudeSettingsPath(dir, false)
 	data, _ := readSettings(path)
 	hooks := hooksMap(data)
 	groups := preToolUseGroups(data)
@@ -161,7 +161,7 @@ func TestUninstallClaudeHook_LeavesOtherHooksIntact(t *testing.T) {
 	_ = writeSettings(path, data)
 
 	// Uninstall envault hook.
-	if err := UninstallClaudeHook(dir); err != nil {
+	if err := UninstallClaudeHook(dir, false); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
 
@@ -184,5 +184,55 @@ func TestUninstallClaudeHook_LeavesOtherHooksIntact(t *testing.T) {
 	}
 	if !found {
 		t.Error("other-hook was removed during envault uninstall")
+	}
+}
+
+func TestInstallClaudeHook_CreatesBackup(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write initial settings.json.
+	clDir := filepath.Join(dir, ".claude")
+	_ = os.MkdirAll(clDir, 0o700)
+	initial := []byte(`{"theme":"dark"}` + "\n")
+	settingsPath := filepath.Join(clDir, "settings.json")
+	_ = os.WriteFile(settingsPath, initial, 0o600)
+
+	if err := InstallClaudeHook(dir, false); err != nil {
+		t.Fatalf("InstallClaudeHook: %v", err)
+	}
+
+	bak, err := os.ReadFile(settingsPath + ".bak")
+	if err != nil {
+		t.Fatalf("backup not created: %v", err)
+	}
+	if string(bak) != string(initial) {
+		t.Errorf("backup content mismatch: got %q, want %q", bak, initial)
+	}
+}
+
+func TestInstallClaudeHook_GlobalUsesHomeDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Use a dummy repoRoot — global install must ignore it.
+	dummy := t.TempDir()
+
+	if err := InstallClaudeHook(dummy, true); err != nil {
+		t.Fatalf("InstallClaudeHook global: %v", err)
+	}
+
+	globalPath := filepath.Join(home, ".claude", "settings.json")
+	if _, err := os.Stat(globalPath); err != nil {
+		t.Fatalf("global settings.json not created at %s: %v", globalPath, err)
+	}
+
+	if !IsClaudeHookInstalled(dummy, true) {
+		t.Error("IsClaudeHookInstalled(global) returned false after global install")
+	}
+
+	// Local path must not have been touched.
+	localPath := filepath.Join(dummy, ".claude", "settings.json")
+	if _, err := os.Stat(localPath); err == nil {
+		t.Error("local settings.json was written during global install")
 	}
 }
