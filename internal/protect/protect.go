@@ -57,7 +57,7 @@ func LoadPatterns(repoRoot string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read private-paths: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var patterns []string
 	sc := bufio.NewScanner(f)
@@ -116,7 +116,7 @@ func savePatterns(repoRoot string, patterns []string) error {
 	if err != nil {
 		return fmt.Errorf("write private-paths: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	for _, p := range patterns {
 		if _, err := fmt.Fprintln(f, p); err != nil {
 			return fmt.Errorf("write private-paths line: %w", err)
