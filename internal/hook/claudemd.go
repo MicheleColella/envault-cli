@@ -65,7 +65,7 @@ func InjectClaudeMD(repoRoot string) error {
 		updated = existing + sep + claudeMDContent
 	}
 
-	return os.WriteFile(path, []byte(updated), 0o644)
+	return os.WriteFile(path, []byte(updated), 0o644) //nolint:gosec // G306: CLAUDE.md is non-sensitive project documentation
 }
 
 // RemoveClaudeMDSection removes the Envault section from <repoRoot>/CLAUDE.md.
@@ -113,7 +113,7 @@ func RemoveClaudeMDSection(repoRoot string) error {
 	if result == "" {
 		return os.Remove(path)
 	}
-	return os.WriteFile(path, []byte(result), 0o644)
+	return os.WriteFile(path, []byte(result), 0o644) //nolint:gosec // G306: CLAUDE.md is non-sensitive project documentation
 }
 
 // IsClaudeMDInjected reports whether the Envault section is present in <repoRoot>/CLAUDE.md.

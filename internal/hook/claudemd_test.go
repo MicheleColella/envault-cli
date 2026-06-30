@@ -29,7 +29,7 @@ func TestInjectClaudeMD_CreatesFileWhenAbsent(t *testing.T) {
 func TestInjectClaudeMD_AppendsToExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	existing := "# My Project\n\nSome content.\n"
-	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(existing), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(existing), 0o644) //nolint:gosec // test helper writing non-sensitive doc file
 
 	if err := InjectClaudeMD(dir); err != nil {
 		t.Fatalf("InjectClaudeMD: %v", err)
@@ -74,7 +74,7 @@ func TestInjectClaudeMD_ReplacesExistingSection(t *testing.T) {
 
 	// Write an old section with outdated content.
 	old := "# Project\n\n" + claudeMDMarkerStart + "\nold content\n" + claudeMDMarkerEnd + "\n"
-	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(old), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(old), 0o644) //nolint:gosec // test helper writing non-sensitive doc file
 
 	if err := InjectClaudeMD(dir); err != nil {
 		t.Fatalf("InjectClaudeMD: %v", err)
@@ -103,7 +103,7 @@ func TestIsClaudeMDInjected_FalseWhenAbsent(t *testing.T) {
 
 func TestIsClaudeMDInjected_FalseWhenNoMarker(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# Project\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# Project\n"), 0o644) //nolint:gosec // test helper writing non-sensitive doc file
 	if IsClaudeMDInjected(dir) {
 		t.Error("expected false when CLAUDE.md has no marker")
 	}
@@ -137,7 +137,7 @@ func TestRemoveClaudeMDSection_RemovesSection(t *testing.T) {
 func TestRemoveClaudeMDSection_PreservesOtherContent(t *testing.T) {
 	dir := t.TempDir()
 	before := "# Project\n\nSome content.\n"
-	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(before), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(before), 0o644) //nolint:gosec // test helper writing non-sensitive doc file
 
 	if err := InjectClaudeMD(dir); err != nil {
 		t.Fatalf("inject: %v", err)

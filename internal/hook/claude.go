@@ -119,7 +119,7 @@ func writeSettings(path string, data map[string]interface{}) error {
 	}
 	// Backup the previous file before overwriting.
 	if prev, err := os.ReadFile(path); err == nil {
-		_ = os.WriteFile(path+".bak", prev, 0o600)
+		_ = os.WriteFile(path+".bak", prev, 0o600) //nolint:gosec // G703: path is derived from our own claudeSettingsPath, not user input
 	}
 	if err := os.WriteFile(path, append(b, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write settings.json: %w", err)
