@@ -16,16 +16,14 @@ import (
 
 func newUninstallCmd() *cobra.Command {
 	var removeKeys bool
-	var global bool
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove everything Envault added: the .envault/ vault, hooks, CLAUDE.md (--keys also clears keychain)",
+		Short: "Remove everything Envault added: the .envault/ vault and the Git hook (--keys also clears keychain)",
 		Long: "Reverses init and every integration Envault installed, leaving the host as before.\n\n" +
-			"Removes: the .envault/ vault directory, the Git pre-commit hook, the project\n" +
-			"Claude Code hook, and the Envault CLAUDE.md section.\n" +
-			"  --global  also remove the global Claude Code hook (~/.claude/settings.json)\n" +
+			"Removes: the .envault/ vault directory and the Git pre-commit hook.\n" +
 			"  --keys    also delete this machine's vault keys from the OS keychain (IRREVERSIBLE)\n\n" +
+			"Claude Code integration is a plugin — remove it with '/plugin uninstall envault'.\n\n" +
 			"Idempotent and safe to run repeatedly. Does not delete the envault binary —\n" +
 			"run scripts/install.sh --uninstall (or rm the binary) for that.",
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -33,17 +31,16 @@ func newUninstallCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("get working directory: %w", err)
 			}
-			return runUninstall(wd, removeKeys, global)
+			return runUninstall(wd, removeKeys)
 		},
 	}
 	cmd.Flags().BoolVar(&removeKeys, "keys", false, "also delete this machine's vault keys from the keychain (irreversible)")
-	cmd.Flags().BoolVar(&global, "global", false, "also remove the global Claude Code hook")
 	return cmd
 }
 
 // runUninstall removes every Envault integration. Each step is guarded so the
 // command is idempotent: re-running it on an already-clean host is a no-op.
-func runUninstall(repoRoot string, removeKeys, global bool) error {
+func runUninstall(repoRoot string, removeKeys bool) error {
 	var removed []string
 
 	if hook.IsGitHookInstalled(repoRoot) {
@@ -51,27 +48,6 @@ func runUninstall(repoRoot string, removeKeys, global bool) error {
 			return fmt.Errorf("remove git hook: %w", err)
 		}
 		removed = append(removed, "Git pre-commit hook")
-	}
-
-	if hook.IsClaudeHookInstalled(repoRoot, false) {
-		if err := hook.UninstallClaudeHook(repoRoot, false); err != nil {
-			return fmt.Errorf("remove project Claude hook: %w", err)
-		}
-		removed = append(removed, "Claude Code hook (project)")
-	}
-
-	if hook.IsClaudeMDInjected(repoRoot) {
-		if err := hook.RemoveClaudeMDSection(repoRoot); err != nil {
-			return fmt.Errorf("remove CLAUDE.md section: %w", err)
-		}
-		removed = append(removed, "CLAUDE.md section")
-	}
-
-	if global && hook.IsClaudeHookInstalled(repoRoot, true) {
-		if err := hook.UninstallClaudeHook(repoRoot, true); err != nil {
-			return fmt.Errorf("remove global Claude hook: %w", err)
-		}
-		removed = append(removed, "Claude Code hook (global)")
 	}
 
 	// Keys must be cleared before the vault dir is removed: removeVaultKeys

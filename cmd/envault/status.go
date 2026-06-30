@@ -17,7 +17,6 @@ type statusResult struct {
 	Recipients            int  `json:"recipients"`
 	Secrets               int  `json:"secrets"`
 	GitHook               bool `json:"git_hook"`
-	ClaudeHook            bool `json:"claude_hook"`
 	PrivacyShieldPatterns int  `json:"privacy_shield_patterns"`
 }
 
@@ -39,7 +38,6 @@ func runStatus(repoRoot string) error {
 	res := statusResult{
 		Initialized: vault.IsInitialized(repoRoot),
 		GitHook:     hook.IsGitHookInstalled(repoRoot),
-		ClaudeHook:  hook.IsClaudeHookInstalled(repoRoot, false) || hook.IsClaudeHookInstalled(repoRoot, true),
 	}
 
 	if res.Initialized {
@@ -71,7 +69,6 @@ func runStatus(repoRoot string) error {
 	ui.Info(fmt.Sprintf("  Recipients               %d", res.Recipients))
 	ui.Info(fmt.Sprintf("  Secrets                  %d", res.Secrets))
 	ui.Info(fmt.Sprintf("  Git hook                 %s", check(res.GitHook)))
-	ui.Info(fmt.Sprintf("  Claude Code hook         %s", check(res.ClaudeHook)))
 	ui.Info(fmt.Sprintf("  Privacy Shield patterns  %d", res.PrivacyShieldPatterns))
 	return nil
 }

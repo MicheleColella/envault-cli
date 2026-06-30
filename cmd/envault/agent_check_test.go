@@ -54,9 +54,8 @@ func TestRunAgentCheck_AgentModeJSON(t *testing.T) {
 	ui.Out = &out
 	ui.Err = &bytes.Buffer{}
 
-	// claude hook not installed, so ready=false → os.Exit(1) would fire in agent mode
-	// We test the JSON structure without exercising the exit by checking a partial config
-	_ = runAgentCheck(root) // may return error or not; we check JSON output
+	// Privacy Shield + output masking are both configured here, so ready=true.
+	_ = runAgentCheck(root) // we check JSON output regardless of return
 
 	raw := strings.TrimSpace(out.String())
 	if raw == "" {
@@ -71,9 +70,6 @@ func TestRunAgentCheck_AgentModeJSON(t *testing.T) {
 		t.Errorf("expected ok=true, got %v", envelope["ok"])
 	}
 	data, _ := envelope["data"].(map[string]interface{})
-	if _, ok := data["claude_hook"]; !ok {
-		t.Error("expected claude_hook field in data")
-	}
 	if _, ok := data["ready"]; !ok {
 		t.Error("expected ready field in data")
 	}

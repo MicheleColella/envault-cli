@@ -16,16 +16,14 @@ import (
 )
 
 type doctorResult struct {
-	Binary           string `json:"binary"`
-	KeychainBackend  bool   `json:"keychain_backend"`
-	GitRemote        string `json:"git_remote"` // credentials redacted
-	Initialized      bool   `json:"initialized"`
-	Recipients       int    `json:"recipients"`
-	Secrets          int    `json:"secrets"`
-	GitHook          bool   `json:"git_hook"`
-	ClaudeHookLocal  bool   `json:"claude_hook_local"`
-	ClaudeHookGlobal bool   `json:"claude_hook_global"`
-	PrivacyShield    int    `json:"privacy_shield_patterns"`
+	Binary          string `json:"binary"`
+	KeychainBackend bool   `json:"keychain_backend"`
+	GitRemote       string `json:"git_remote"` // credentials redacted
+	Initialized     bool   `json:"initialized"`
+	Recipients      int    `json:"recipients"`
+	Secrets         int    `json:"secrets"`
+	GitHook         bool   `json:"git_hook"`
+	PrivacyShield   int    `json:"privacy_shield_patterns"`
 }
 
 func newDoctorCmd() *cobra.Command {
@@ -48,13 +46,11 @@ func runDoctor(repoRoot string) error {
 	remote, _ := git.DetectOrigin(repoRoot)
 
 	res := doctorResult{
-		Binary:           bin,
-		KeychainBackend:  kcErr == nil,
-		GitRemote:        redactRemote(remote),
-		Initialized:      vault.IsInitialized(repoRoot),
-		GitHook:          hook.IsGitHookInstalled(repoRoot),
-		ClaudeHookLocal:  hook.IsClaudeHookInstalled(repoRoot, false),
-		ClaudeHookGlobal: hook.IsClaudeHookInstalled(repoRoot, true),
+		Binary:          bin,
+		KeychainBackend: kcErr == nil,
+		GitRemote:       redactRemote(remote),
+		Initialized:     vault.IsInitialized(repoRoot),
+		GitHook:         hook.IsGitHookInstalled(repoRoot),
 	}
 	if res.Initialized {
 		if r, err := vault.ListRecipients(repoRoot); err == nil {
@@ -92,9 +88,8 @@ func runDoctor(repoRoot string) error {
 	ui.Info(fmt.Sprintf("  Recipients               %d", res.Recipients))
 	ui.Info(fmt.Sprintf("  Secrets                  %d", res.Secrets))
 	ui.Info(fmt.Sprintf("  Git hook                 %s", check(res.GitHook)))
-	ui.Info(fmt.Sprintf("  Claude hook (project)    %s", check(res.ClaudeHookLocal)))
-	ui.Info(fmt.Sprintf("  Claude hook (global)     %s", check(res.ClaudeHookGlobal)))
 	ui.Info(fmt.Sprintf("  Privacy Shield patterns  %d", res.PrivacyShield))
+	ui.Info("  Claude Code              install the Envault plugin (/plugin install envault@envault)")
 	return nil
 }
 

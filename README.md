@@ -130,13 +130,12 @@ envault run -- npm start
 | `envault exec` | Open `$SHELL` with all env secrets injected | ✅ |
 | `envault scan [--staged/--all]` | Scan for secrets (pattern rules + entropy heuristic) | ✅ |
 | `envault hook install --git` | Install a pre-commit hook that blocks secret leaks (`--uninstall` to remove) | ✅ |
-| `envault hook install --claude` | Install the Claude Code / AI-agent integration (Privacy Shield) | ✅ |
-| `envault protect add <path>` | Mark a path/glob off-limits to AI agents (blocked by the Claude hook) | ✅ |
+| `envault protect add <path>` | Mark a path/glob off-limits to AI agents (blocked by the Envault plugin) | ✅ |
 | `envault audit log show/verify` | Show or verify the tamper-evident AI access log | ✅ |
 | `envault status` | Structured health check of the vault, hooks, and shield | ✅ |
 | `envault agent-check` | Verify the AI-agent environment is ready (exit 1 if not) | ✅ |
 | `envault doctor` | Diagnose install state, hooks, keychain, and Git remote (no secrets exposed) | ✅ |
-| `envault uninstall [--keys] [--global]` | Remove all hooks/integrations (`--keys` also clears keychain); `install.sh --uninstall` removes the binary | ✅ |
+| `envault uninstall [--keys]` | Remove the vault and Git hook (`--keys` also clears keychain); `install.sh --uninstall` removes the binary. Claude Code: `/plugin uninstall envault` | ✅ |
 
 > Add `--agent-safe` (alias `--json`) to any command for structured JSON output;
 > in this mode `cat`/`export` refuse to print plaintext unless you pass `--force`.
@@ -154,7 +153,7 @@ Envault is designed so that you do not have to trust anyone except your Git remo
 - **No disk writes** — secrets are decrypted in memory and injected directly into the child process. Nothing is written to a temp file.
 - **Per-recipient access control** — adding or removing a teammate from the vault controls who can decrypt. `rotate` re-seals a secret with a fresh data key for the current recipients, truly revoking a removed member.
 - **Leak prevention** — an optional Git pre-commit hook (`envault hook install --git`) scans the staged diff for `.env` files, private keys, and known API tokens, blocking the commit before a secret ships.
-- **AI Privacy Shield** — an optional Claude Code hook (`envault hook install --claude`) blocks AI agents from reading protected paths or running `envault cat`/`export`, masks any vault secret that appears in tool output, and records every access in a tamper-evident audit log.
+- **AI Privacy Shield** — the [Envault Claude Code plugin](#claude-code-plugin) blocks AI agents from reading protected paths or running `envault cat`/`export`, masks any vault secret that appears in tool output, and records every access in a tamper-evident audit log.
 - **Integrity guaranteed** — ciphertext is authenticated; any tampering is detected and rejected before decryption.
 
 ---

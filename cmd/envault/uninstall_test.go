@@ -19,7 +19,7 @@ func TestRunUninstall_CleanHostIsNoop(t *testing.T) {
 	ui.Out = &out
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runUninstall(root, false, false); err != nil {
+	if err := runUninstall(root, false); err != nil {
 		t.Fatalf("runUninstall: %v", err)
 	}
 	if !strings.Contains(out.String(), "already clean") {
@@ -38,7 +38,7 @@ func TestRunUninstall_RemovesGitHookAndIsIdempotent(t *testing.T) {
 		t.Fatalf("InstallGitHook: %v", err)
 	}
 
-	if err := runUninstall(dir, false, false); err != nil {
+	if err := runUninstall(dir, false); err != nil {
 		t.Fatalf("runUninstall: %v", err)
 	}
 	if hook.IsGitHookInstalled(dir) {
@@ -48,7 +48,7 @@ func TestRunUninstall_RemovesGitHookAndIsIdempotent(t *testing.T) {
 	// Idempotent: second run is a clean no-op.
 	var out bytes.Buffer
 	ui.Out = &out
-	if err := runUninstall(dir, false, false); err != nil {
+	if err := runUninstall(dir, false); err != nil {
 		t.Fatalf("second runUninstall: %v", err)
 	}
 	if !strings.Contains(out.String(), "already clean") {
@@ -62,7 +62,7 @@ func TestRunUninstall_RemovesVaultDirectory(t *testing.T) {
 	ui.Out = &bytes.Buffer{}
 	t.Cleanup(func() { ui.Out = os.Stdout })
 
-	if err := runUninstall(root, false, false); err != nil {
+	if err := runUninstall(root, false); err != nil {
 		t.Fatalf("runUninstall: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, vault.DirName)); !os.IsNotExist(err) {
