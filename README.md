@@ -53,6 +53,28 @@ Windows binaries are not yet published (pending a Windows keychain backend).
 
 ---
 
+## Claude Code plugin
+
+Envault ships as a [Claude Code](https://claude.com/claude-code) plugin: the AI
+Privacy Shield hooks, the `/envault:*` slash commands, and a skill that teaches
+Claude the vault workflow, all enabled per-project (never globally by default).
+
+```text
+/plugin marketplace add MicheleColella/envault-cli
+/plugin install envault
+```
+
+Enabling the plugin is reversible (`/plugin uninstall envault`) and scoped via
+`.claude/settings.json` (`enabledPlugins`). The plugin is **additive** — the CLI
+installs above are still the way to use Envault from a plain terminal.
+
+**Packaging decision:** the plugin's hooks call `envault` on your `PATH`; it does
+**not** bundle platform-specific binaries. Install the binary once via any method
+above, then enable the plugin. Run `envault doctor` if the hooks report the binary
+is missing.
+
+---
+
 ## Quick start
 
 ```sh

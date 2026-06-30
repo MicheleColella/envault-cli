@@ -1,0 +1,17 @@
+{
+  "name": "envault",
+  "metadata": {
+    "description": "Envault — Git-backed, zero-trust secrets management with an AI Privacy Shield for Claude Code."
+  },
+  "owner": {
+    "name": "Michele Colella",
+    "url": "https://github.com/MicheleColella"
+  },
+  "plugins": [
+    {
+      "name": "envault",
+      "source": "./",
+      "description": "Git-backed, zero-trust secrets CLI with an AI Privacy Shield for Claude Code: blocks agents from reading vault secrets and masks leaked secret values in tool output."
+    }
+  ]
+}
