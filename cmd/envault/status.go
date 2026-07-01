@@ -25,7 +25,19 @@ type statusResult struct {
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show vault health and integration status",
+		Short: "Check vault initialization, recipients, secrets, and integrations",
+		Long: `Displays the health and integration status of the vault.
+
+Shows:
+  • Vault initialized — whether .envault/ is set up in this repo
+  • Recipients — number of team members who can decrypt secrets
+  • Secrets — number of sealed env vars and files
+  • Git hook — whether the pre-commit scanner is installed
+  • Privacy Shield patterns — number of protected paths blocking AI access
+  • Agent unlocked keys — number of identities cached by the key-unlock daemon
+
+Use this to verify the vault is ready, debug integration issues, or confirm
+AI Privacy Shield is active. Output is JSON in agent mode (--agent-safe).`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -62,6 +74,7 @@ func computeStatus(repoRoot string) statusResult {
 	return res
 }
 
+// runStatus collects and displays vault health (human or JSON based on AgentMode).
 func runStatus(repoRoot string) error {
 	res := computeStatus(repoRoot)
 
