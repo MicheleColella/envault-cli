@@ -1,8 +1,16 @@
 package hook
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/MicheleColella/envault-cli/internal/agent"
+	envcrypto "github.com/MicheleColella/envault-cli/internal/crypto"
+	"github.com/MicheleColella/envault-cli/internal/vault"
 )
 
 func TestMaskSecrets_ReplacesPlaintext(t *testing.T) {
@@ -89,5 +97,93 @@ func TestMaskSecrets_EmptyPlaintextSkipped(t *testing.T) {
 	masked, _ := maskSecrets(input, secrets)
 	if masked != input {
 		t.Error("empty secret should not modify output")
+	}
+}
+
+// ---- RunHookPostuse via the key-unlock agent (no ENVAULT_PASSPHRASE) -------
+
+// withTestAgentSocket points the agent package's fixed socket path at a
+// short-path temp dir for the test (see internal/agent's own tests for why
+// t.TempDir() is too long on macOS), and unsets ENVAULT_PASSPHRASE so any
+// masking in the test can only succeed via the agent.
+func withTestAgentSocket(t *testing.T) {
+	t.Helper()
+	home, err := os.MkdirTemp("/tmp", "envault-hook-test-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	oldHome := os.Getenv("HOME")
+	oldPass := os.Getenv("ENVAULT_PASSPHRASE")
+	_ = os.Setenv("HOME", home)
+	_ = os.Unsetenv("ENVAULT_PASSPHRASE")
+	t.Cleanup(func() {
+		_ = os.Setenv("HOME", oldHome)
+		_ = os.Setenv("ENVAULT_PASSPHRASE", oldPass)
+		_ = os.RemoveAll(home)
+	})
+}
+
+func TestRunHookPostuse_MasksViaAgent_NoPassphraseNeeded(t *testing.T) {
+	withTestAgentSocket(t)
+
+	ln, err := agent.Listen()
+	if err != nil {
+		t.Fatalf("agent.Listen: %v", err)
+	}
+	go agent.Serve(ln)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	dir := t.TempDir()
+	if _, err := vault.Init(dir, "", false); err != nil {
+		t.Fatalf("vault.Init: %v", err)
+	}
+
+	priv, pub, err := envcrypto.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	const id = "alice@example.com"
+	if err := vault.AddRecipient(dir, vault.Recipient{ID: id, PublicKey: pub}); err != nil {
+		t.Fatalf("AddRecipient: %v", err)
+	}
+
+	env, err := envcrypto.Seal([]byte("topsecretvalue"), []envcrypto.PublicKey{pub}, envcrypto.AES256GCM)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	store, _ := vault.LoadStore(dir)
+	store = store.Upsert(vault.Entry{
+		Name: "MY_SECRET", Kind: vault.KindEnv, Algorithm: envcrypto.AES256GCM,
+		Recipients: []string{id}, Envelope: env,
+	})
+	if err := vault.SaveStore(dir, store); err != nil {
+		t.Fatalf("SaveStore: %v", err)
+	}
+
+	if err := agent.Unlock(id, priv[:], time.Minute); err != nil {
+		t.Fatalf("agent.Unlock: %v", err)
+	}
+
+	origWd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	input := map[string]interface{}{
+		"tool_name":     "Bash",
+		"tool_input":    map[string]interface{}{"command": "env"},
+		"tool_response": "MY_SECRET=topsecretvalue",
+	}
+	b, _ := json.Marshal(input)
+	var w bytes.Buffer
+
+	err = RunHookPostuse(bytes.NewReader(b), &w)
+	if err != ErrBlockToolCall {
+		t.Fatalf("expected ErrBlockToolCall (masked output produced), got: %v", err)
+	}
+	if strings.Contains(w.String(), "topsecretvalue") {
+		t.Errorf("secret plaintext leaked into masked output: %s", w.String())
+	}
+	if !strings.Contains(w.String(), "<ENVAULT:MY_SECRET>") {
+		t.Errorf("expected placeholder in masked output, got: %s", w.String())
 	}
 }

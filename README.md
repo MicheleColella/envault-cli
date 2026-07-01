@@ -71,6 +71,17 @@ headless, per Claude Code session, with no persistent daemon. Sealing a
 via MCP or bash — that requires a human to type it in their own terminal, or
 the plaintext would have to pass through the model's context first.
 
+Since the MCP server is headless, operations needing your private key
+(`rotate`, `run`, `protect encrypt`, `push`/`pull`) normally need
+`ENVAULT_PASSPHRASE` set. Run `envault agent unlock` once from your own
+terminal instead: it prompts for the passphrase interactively, then a small
+background agent (`~/.envault/agent.sock`, ssh-agent-style) keeps the
+decrypted key cached in memory for a bounded time (default 8h) — no
+passphrase needed for the rest of that window, even in a Claude Code session
+opened later from a different terminal. This is opt-in and widens the
+key's exposure window in exchange for convenience; `envault status`/`doctor`
+always show whether it's active.
+
 ```text
 /plugin marketplace add MicheleColella/envault-cli
 /plugin install envault@envault
@@ -122,6 +133,7 @@ envault run -- npm start
 | Command | Description | Status |
 |---|---|---|
 | `envault init` | Initialise a vault in the current repo | ✅ |
+| `envault agent unlock/lock/stop/status` | Unlock your key into a background agent for passphrase-free use (Claude Code MCP, `postuse` masking) | ✅ |
 | `envault key new` | Generate an identity key (sealed in OS keychain) | ✅ |
 | `envault key list` | List vault recipients | ✅ |
 | `envault key export` | Export your public key to share with teammates | ✅ |
@@ -168,6 +180,7 @@ Envault is designed so that you do not have to trust anyone except your Git remo
 - **Leak prevention** — an optional Git pre-commit hook (`envault hook install --git`) scans the staged diff for `.env` files, private keys, and known API tokens, blocking the commit before a secret ships.
 - **AI Privacy Shield** — the [Envault Claude Code plugin](#claude-code-plugin) blocks AI agents from reading protected paths or running `envault cat`/`export`, masks any vault secret that appears in tool output, and records every access in a tamper-evident audit log.
 - **Integrity guaranteed** — ciphertext is authenticated; any tampering is detected and rejected before decryption.
+- **Key-unlock agent is opt-in and clearly bounded** — `envault agent unlock` trades the "decrypt on demand, clear immediately" norm for a decrypted key cached in memory for a bounded TTL (default 8h), so headless callers (Claude Code) can skip the passphrase. Nothing changes unless you explicitly run it; `envault status`/`doctor` always show whether it's active.
 
 ---
 
@@ -191,6 +204,7 @@ install from signed cross-platform releases.
 | v0.9.1 — Clean uninstall & doctor | ✅ shipped |
 | v0.9.2 — Claude Code plugin & marketplace distribution | ✅ shipped |
 | v0.9.3 — Embedded MCP server (Claude Code native protocol) | ✅ shipped |
+| v0.9.4 — Key-unlock agent (ssh-agent-style, passphrase-free Claude Code UX) | ✅ shipped |
 | v0.10.0 — Integration testing (Gitea) | 🔜 next |
 | v1.0.0 — Stable release | planned |
 

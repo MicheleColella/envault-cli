@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/MicheleColella/envault-cli/internal/agent"
 	"github.com/MicheleColella/envault-cli/internal/keychain"
 )
 
@@ -16,16 +17,36 @@ import (
 const passphraseEnv = "ENVAULT_PASSPHRASE" //nolint:gosec // G101 false positive: this is the env var NAME, not a credential value
 
 // openKeychain returns the OS keychain wrapped in the passphrase-protection
-// decorator. Every private key is encrypted under a passphrase-derived KEK
-// before it reaches the OS secret store, so a silently extracted blob is
-// useless ciphertext.
+// decorator, further wrapped in an agent-aware decorator. Every private key
+// is encrypted under a passphrase-derived KEK before it reaches the OS
+// secret store, so a silently extracted blob is useless ciphertext.
 func openKeychain() (keychain.Store, error) {
 	inner, err := keychain.New()
 	if err != nil {
 		return nil, err
 	}
-	return keychain.NewProtected(inner, askPassphrase), nil
+	return &agentAwareStore{inner: keychain.NewProtected(inner, askPassphrase)}, nil
 }
+
+// agentAwareStore tries the envault key-unlock agent (internal/agent) before
+// falling back to inner unchanged. Only Unseal is intercepted — Seal/Delete
+// manage the OS keychain itself and have nothing to do with the agent's
+// in-memory cache. When no agent is running, or it doesn't have this id
+// cached, TryGet fails closed and inner handles the request exactly as
+// before the agent existed — this is a pure, optional fast path.
+type agentAwareStore struct {
+	inner keychain.Store
+}
+
+func (a *agentAwareStore) Unseal(id string) ([]byte, error) {
+	if key, ok := agent.TryGet(id); ok {
+		return key, nil
+	}
+	return a.inner.Unseal(id)
+}
+
+func (a *agentAwareStore) Seal(id string, data []byte) error { return a.inner.Seal(id, data) }
+func (a *agentAwareStore) Delete(id string) error            { return a.inner.Delete(id) }
 
 // askPassphrase obtains the keychain passphrase, preferring the ENVAULT_PASSPHRASE
 // environment variable (for CI) and falling back to a hidden interactive prompt.

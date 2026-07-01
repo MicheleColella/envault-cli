@@ -43,6 +43,8 @@ ciphertext; private keys never leave the machine.
 | Manage protected paths | `envault protect add\|list\|remove <path>` | either |
 | Audit log | `envault audit log show` / `verify` | either |
 | Diagnose install | `envault doctor` | either |
+| Unlock the key for passphrase-free use | `envault agent unlock` | **user only**, in their own terminal |
+| Check what's unlocked / lock again | `envault agent status` / `lock` | either |
 
 ## MCP tools (preferred over bash when available)
 
@@ -56,10 +58,24 @@ instead of a shell string, and tool responses only ever contain metadata
 equivalent, by design — those still go through bash (where the Privacy Shield
 hooks apply), or must be run by the user themselves for `add`/`set`.
 
+## Passphrase-free operation (the key-unlock agent)
+
+If the user has run `envault agent unlock` from their own terminal, commands
+needing the private key (`envault_rotate`, `envault_run`,
+`envault_protect` encrypt, `push`/`pull`, and `postuse` masking) work with no
+passphrase prompt and no `ENVAULT_PASSPHRASE` — check `envault status` /
+`envault doctor` for "Agent unlocked keys" / "Key-unlock agent" to see if
+this is active. If a private-key operation fails with a passphrase error and
+the user seems to expect it to "just work", suggest `envault agent unlock`
+(run by them, in a real terminal — it prompts interactively) rather than
+suggesting they set `ENVAULT_PASSPHRASE` in the environment, which is the
+less secure, more manual fallback.
+
 ## Notes
 
 - `envault status` / `list` / `audit` / `doctor` are safe, read-only, and never
   expose secret values — use them freely to understand vault state.
-- If a command needs a passphrase non-interactively, it reads `ENVAULT_PASSPHRASE`.
+- If a command needs a passphrase non-interactively and no agent is unlocked,
+  it reads `ENVAULT_PASSPHRASE`.
 - The binary must be on PATH (installed via the Envault installer, Homebrew, or
   `go install`). Run `envault doctor` if commands are not found.

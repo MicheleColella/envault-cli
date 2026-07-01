@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/MicheleColella/envault-cli/internal/agent"
 	"github.com/MicheleColella/envault-cli/internal/hook"
 	"github.com/MicheleColella/envault-cli/internal/protect"
 	"github.com/MicheleColella/envault-cli/internal/ui"
@@ -18,6 +19,7 @@ type statusResult struct {
 	Secrets               int  `json:"secrets"`
 	GitHook               bool `json:"git_hook"`
 	PrivacyShieldPatterns int  `json:"privacy_shield_patterns"`
+	AgentUnlockedKeys     int  `json:"agent_unlocked_keys"`
 }
 
 func newStatusCmd() *cobra.Command {
@@ -54,6 +56,9 @@ func computeStatus(repoRoot string) statusResult {
 			res.PrivacyShieldPatterns = len(patterns)
 		}
 	}
+	if entries, err := agent.Status(); err == nil {
+		res.AgentUnlockedKeys = len(entries)
+	}
 	return res
 }
 
@@ -78,5 +83,6 @@ func runStatus(repoRoot string) error {
 	ui.Info(fmt.Sprintf("  Secrets                  %d", res.Secrets))
 	ui.Info(fmt.Sprintf("  Git hook                 %s", check(res.GitHook)))
 	ui.Info(fmt.Sprintf("  Privacy Shield patterns  %d", res.PrivacyShieldPatterns))
+	ui.Info(fmt.Sprintf("  Agent unlocked keys      %d", res.AgentUnlockedKeys))
 	return nil
 }

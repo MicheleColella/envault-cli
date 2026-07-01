@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/MicheleColella/envault-cli/internal/agent"
 	"github.com/MicheleColella/envault-cli/internal/audit"
 	envcrypto "github.com/MicheleColella/envault-cli/internal/crypto"
 	"github.com/MicheleColella/envault-cli/internal/keychain"
@@ -23,14 +24,16 @@ type PostuseInput struct {
 
 // RunHookPostuse reads Claude Code's PostToolUse JSON from r.
 //
-// If ENVAULT_PASSPHRASE is set, decrypts all KindEnv vault secrets and scans
-// the tool response for their plaintext values (and base64-encoded variants),
+// If the current user's private key is available — via the key-unlock agent
+// (internal/agent; no passphrase needed, see envault agent unlock) or, failing
+// that, ENVAULT_PASSPHRASE — decrypts all KindEnv vault secrets and scans the
+// tool response for their plaintext values (and base64-encoded variants),
 // replacing each match with a structured placeholder
 // `<ENVAULT:NAME>` (or `<ENVAULT:NAME|base64>`) before writing to w and exiting
 // with code 2 so Claude Code uses the masked output instead of the original.
 //
-// When the passphrase is unavailable or the vault is absent the function returns
-// nil (pass-through), logging the skip to the audit log.
+// When neither key source is available, or the vault is absent, the function
+// returns nil (pass-through), logging the skip to the audit log.
 func RunHookPostuse(r io.Reader, w io.Writer) error {
 	var input PostuseInput
 	if err := json.NewDecoder(r).Decode(&input); err != nil {
@@ -42,12 +45,7 @@ func RunHookPostuse(r io.Reader, w io.Writer) error {
 		return nil
 	}
 
-	passphrase := os.Getenv("ENVAULT_PASSPHRASE")
-	if passphrase == "" {
-		return nil // cannot decrypt without passphrase in hook context
-	}
-
-	secrets, err := loadSecretsForMasking(wd, []byte(passphrase))
+	secrets, err := loadSecretsForMasking(wd)
 	if err != nil || len(secrets) == 0 {
 		return nil
 	}
@@ -77,44 +75,22 @@ type secretValue struct {
 	Plaintext []byte
 }
 
-// loadSecretsForMasking opens the keychain with passphrase, decrypts all
-// KindEnv entries, and returns the plaintext values. Caller must not store
-// the returned slices beyond the call lifetime.
-func loadSecretsForMasking(repoRoot string, passphrase []byte) ([]secretValue, error) {
-	kc, err := keychain.New()
-	if err != nil {
-		return nil, err
-	}
-
-	askFunc := func(_ string) ([]byte, error) { return passphrase, nil }
-	protected := keychain.NewProtected(kc, askFunc)
-
+// loadSecretsForMasking finds the current user's private key (agent cache,
+// falling back to ENVAULT_PASSPHRASE) and decrypts all KindEnv entries,
+// returning their plaintext values. Caller must not store the returned
+// slices beyond the call lifetime.
+func loadSecretsForMasking(repoRoot string) ([]secretValue, error) {
 	store, err := vault.LoadStore(repoRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	// Find which recipient key we own.
 	recipients, err := vault.ListRecipients(repoRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	var priv envcrypto.PrivateKey
-	var found bool
-	for _, rec := range recipients {
-		raw, err := protected.Unseal(rec.ID)
-		if err != nil {
-			continue
-		}
-		if len(raw) == 32 {
-			copy(priv[:], raw)
-			clear(raw)
-			found = true
-			break
-		}
-		clear(raw)
-	}
+	priv, found := findMaskingKey(recipients)
 	if !found {
 		return nil, nil
 	}
@@ -132,6 +108,49 @@ func loadSecretsForMasking(repoRoot string, passphrase []byte) ([]secretValue, e
 		out = append(out, secretValue{Name: e.Name, Plaintext: pt})
 	}
 	return out, nil
+}
+
+// findMaskingKey locates the current user's private key among recipients.
+// postuse runs headless (no TTY), so it can never prompt interactively —
+// it prefers the key-unlock agent's cache (no passphrase needed) and falls
+// back to ENVAULT_PASSPHRASE-based keychain decryption, the same fallback
+// order as the passphrase-vs-agent choice everywhere else in the CLI.
+func findMaskingKey(recipients []vault.Recipient) (envcrypto.PrivateKey, bool) {
+	var priv envcrypto.PrivateKey
+
+	for _, rec := range recipients {
+		if key, ok := agent.TryGet(rec.ID); ok && len(key) == 32 {
+			copy(priv[:], key)
+			clear(key)
+			return priv, true
+		}
+	}
+
+	passphrase := os.Getenv("ENVAULT_PASSPHRASE")
+	if passphrase == "" {
+		return priv, false
+	}
+
+	kc, err := keychain.New()
+	if err != nil {
+		return priv, false
+	}
+	askFunc := func(_ string) ([]byte, error) { return []byte(passphrase), nil }
+	protected := keychain.NewProtected(kc, askFunc)
+
+	for _, rec := range recipients {
+		raw, err := protected.Unseal(rec.ID)
+		if err != nil {
+			continue
+		}
+		if len(raw) == 32 {
+			copy(priv[:], raw)
+			clear(raw)
+			return priv, true
+		}
+		clear(raw)
+	}
+	return priv, false
 }
 
 // maskSecrets scans text for each secret's plaintext (and its base64 variant)

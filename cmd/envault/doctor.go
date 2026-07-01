@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/MicheleColella/envault-cli/internal/agent"
 	"github.com/MicheleColella/envault-cli/internal/git"
 	"github.com/MicheleColella/envault-cli/internal/hook"
 	"github.com/MicheleColella/envault-cli/internal/keychain"
@@ -24,6 +25,8 @@ type doctorResult struct {
 	Secrets         int    `json:"secrets"`
 	GitHook         bool   `json:"git_hook"`
 	PrivacyShield   int    `json:"privacy_shield_patterns"`
+	AgentRunning    bool   `json:"agent_running"`
+	AgentUnlocked   int    `json:"agent_unlocked_keys"`
 }
 
 func newDoctorCmd() *cobra.Command {
@@ -63,6 +66,10 @@ func runDoctor(repoRoot string) error {
 			res.PrivacyShield = len(p)
 		}
 	}
+	res.AgentRunning = agent.IsRunning()
+	if entries, err := agent.Status(); err == nil {
+		res.AgentUnlocked = len(entries)
+	}
 
 	if ui.AgentMode {
 		ui.JSONResult(res)
@@ -89,6 +96,7 @@ func runDoctor(repoRoot string) error {
 	ui.Info(fmt.Sprintf("  Secrets                  %d", res.Secrets))
 	ui.Info(fmt.Sprintf("  Git hook                 %s", check(res.GitHook)))
 	ui.Info(fmt.Sprintf("  Privacy Shield patterns  %d", res.PrivacyShield))
+	ui.Info(fmt.Sprintf("  Key-unlock agent         %s (%d key(s) unlocked)", check(res.AgentRunning), res.AgentUnlocked))
 	ui.Info("  Claude Code              install the Envault plugin (" + pluginInstallHint + ")")
 	return nil
 }
