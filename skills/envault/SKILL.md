@@ -36,6 +36,17 @@ ciphertext; private keys never leave the machine.
 | Audit log | `envault audit log show` / `verify` |
 | Diagnose install | `envault doctor` |
 
+## MCP tools (preferred over bash when available)
+
+If the `envault` MCP server is connected (tools named `envault_status`,
+`envault_add`, `envault_list`, `envault_rotate`, `envault_run`,
+`envault_protect`, `envault_push`, `envault_pull`), prefer calling those tools
+directly instead of the equivalent bash command — parameters go through
+JSON-Schema validation instead of a shell string, and tool responses only ever
+contain metadata (name, algorithm, recipient count, timestamps), never a
+secret value. `cat`/`export`/`data`/`import`/`key *` have no MCP equivalent —
+those still go through bash, where the Privacy Shield hooks apply.
+
 ## Notes
 
 - `envault status` / `list` / `audit` / `doctor` are safe, read-only, and never

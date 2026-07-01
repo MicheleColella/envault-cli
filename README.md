@@ -56,8 +56,18 @@ Windows binaries are not yet published (pending a Windows keychain backend).
 ## Claude Code plugin
 
 Envault ships as a [Claude Code](https://claude.com/claude-code) plugin: the AI
-Privacy Shield hooks, the `/envault:*` slash commands, and a skill that teaches
-Claude the vault workflow, all enabled per-project (never globally by default).
+Privacy Shield hooks, an embedded MCP server, the `/envault:*` slash commands,
+and a skill that teaches Claude the vault workflow, all enabled per-project
+(never globally by default).
+
+The MCP server (`envault mcp serve`) exposes typed, JSON-Schema-validated
+tools (`envault_status`, `envault_add`, `envault_list`, `envault_rotate`,
+`envault_run`, `envault_protect`, `envault_push`, `envault_pull`) so Claude
+calls Envault directly instead of constructing bash commands — there's no
+shell string to parse, so no shell-injection surface, and tool responses
+carry only metadata (name, algorithm, recipient count, timestamps), never a
+secret value. It runs headless, per Claude Code session, with no persistent
+daemon.
 
 ```text
 /plugin marketplace add MicheleColella/envault-cli
@@ -132,6 +142,7 @@ envault run -- npm start
 | `envault hook install --git` | Install a pre-commit hook that blocks secret leaks (`--uninstall` to remove) | ✅ |
 | `envault protect add <path>` | Mark a path/glob off-limits to AI agents (blocked by the Envault plugin) | ✅ |
 | `envault audit log show/verify` | Show or verify the tamper-evident AI access log | ✅ |
+| `envault mcp serve [--project <path>] [--dry-run]` | Start the Envault MCP server for Claude Code (JSON-RPC 2.0 over stdio); `--dry-run` prints the tool schemas | ✅ |
 | `envault status` | Structured health check of the vault, hooks, and shield | ✅ |
 | `envault agent-check` | Verify the AI-agent environment is ready (exit 1 if not) | ✅ |
 | `envault doctor` | Diagnose install state, hooks, keychain, and Git remote (no secrets exposed) | ✅ |
@@ -177,7 +188,8 @@ install from signed cross-platform releases.
 | v0.9.0 — Installer & cross-platform signed releases | ✅ shipped |
 | v0.9.1 — Clean uninstall & doctor | ✅ shipped |
 | v0.9.2 — Claude Code plugin & marketplace distribution | ✅ shipped |
-| v0.9.3 — Embedded MCP server (Claude Code native protocol) | 🔜 next |
+| v0.9.3 — Embedded MCP server (Claude Code native protocol) | ✅ shipped |
+| v0.10.0 — Integration testing (Gitea) | 🔜 next |
 | v1.0.0 — Stable release | planned |
 
 ---

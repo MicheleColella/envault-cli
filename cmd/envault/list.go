@@ -32,6 +32,24 @@ func newListCmd() *cobra.Command {
 	}
 }
 
+// listEntries loads the vault store and maps its entries to the agent-mode
+// JSON shape. Shared by runList and the MCP envault_list tool.
+func listEntries(repoRoot string) ([]listEntry, error) {
+	store, err := vault.LoadStore(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]listEntry, len(store.Entries))
+	for i, e := range store.Entries {
+		entries[i] = listEntry{
+			Name:      e.Name,
+			Kind:      string(e.Kind),
+			Algorithm: strings.ToUpper(string(e.Algorithm)),
+		}
+	}
+	return entries, nil
+}
+
 func runList(repoRoot string) error {
 	if !vault.IsInitialized(repoRoot) {
 		return fmt.Errorf("vault not initialized — run `envault init` first")
@@ -43,13 +61,9 @@ func runList(repoRoot string) error {
 	}
 
 	if ui.AgentMode {
-		entries := make([]listEntry, len(store.Entries))
-		for i, e := range store.Entries {
-			entries[i] = listEntry{
-				Name:      e.Name,
-				Kind:      string(e.Kind),
-				Algorithm: strings.ToUpper(string(e.Algorithm)),
-			}
+		entries, err := listEntries(repoRoot)
+		if err != nil {
+			return err
 		}
 		ui.JSONResult(entries)
 		return nil

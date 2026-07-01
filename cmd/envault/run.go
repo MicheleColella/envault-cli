@@ -88,25 +88,7 @@ func runRun(repoRoot string, args []string, kc keychain.Store, f runFilter) erro
 		return err
 	}
 
-	onlySet := toSet(f.only)
-	exceptSet := toSet(f.except)
-
-	var envEntries []vault.Entry
-	for _, e := range store.Entries {
-		if e.Kind != vault.KindEnv {
-			continue
-		}
-		if onlySet != nil {
-			if _, ok := onlySet[e.Name]; !ok {
-				continue
-			}
-		} else if exceptSet != nil {
-			if _, ok := exceptSet[e.Name]; ok {
-				continue
-			}
-		}
-		envEntries = append(envEntries, e)
-	}
+	envEntries := selectEnvEntries(store, f)
 
 	priv, id, err := loadCurrentUserKey(repoRoot, kc)
 	if err != nil {
@@ -116,19 +98,9 @@ func runRun(repoRoot string, args []string, kc keychain.Store, f runFilter) erro
 
 	ui.Info(fmt.Sprintf("decrypting %d secret(s) in memory as %s…", len(envEntries), id))
 
-	plaintexts := make([][]byte, len(envEntries))
-	extraEnv := make([]string, len(envEntries))
-
-	for i, e := range envEntries {
-		pt, err := envcrypto.Unseal(e.Envelope, priv)
-		if err != nil {
-			for j := 0; j < i; j++ {
-				clear(plaintexts[j])
-			}
-			return fmt.Errorf("decrypt %s: %w", e.Name, err)
-		}
-		plaintexts[i] = pt
-		extraEnv[i] = fmt.Sprintf("%s=%s", e.Name, string(pt))
+	extraEnv, plaintexts, err := decryptEnvEntries(envEntries, priv)
+	if err != nil {
+		return err
 	}
 	defer func() {
 		for _, pt := range plaintexts {
@@ -178,6 +150,53 @@ func runRun(repoRoot string, args []string, kc keychain.Store, f runFilter) erro
 		return waitErr
 	}
 	return nil
+}
+
+// selectEnvEntries returns the KindEnv entries of store that pass filter f
+// (only/except by name). Pure — no I/O, no decryption.
+func selectEnvEntries(store *vault.Store, f runFilter) []vault.Entry {
+	onlySet := toSet(f.only)
+	exceptSet := toSet(f.except)
+
+	var envEntries []vault.Entry
+	for _, e := range store.Entries {
+		if e.Kind != vault.KindEnv {
+			continue
+		}
+		if onlySet != nil {
+			if _, ok := onlySet[e.Name]; !ok {
+				continue
+			}
+		} else if exceptSet != nil {
+			if _, ok := exceptSet[e.Name]; ok {
+				continue
+			}
+		}
+		envEntries = append(envEntries, e)
+	}
+	return envEntries
+}
+
+// decryptEnvEntries unseals every entry in envEntries with priv and returns
+// them as "KEY=value" env lines plus the raw plaintexts (caller must clear()
+// each one once done). On error, plaintexts decrypted so far are cleared
+// before returning.
+func decryptEnvEntries(envEntries []vault.Entry, priv envcrypto.PrivateKey) ([]string, [][]byte, error) {
+	plaintexts := make([][]byte, len(envEntries))
+	extraEnv := make([]string, len(envEntries))
+
+	for i, e := range envEntries {
+		pt, err := envcrypto.Unseal(e.Envelope, priv)
+		if err != nil {
+			for j := 0; j < i; j++ {
+				clear(plaintexts[j])
+			}
+			return nil, nil, fmt.Errorf("decrypt %s: %w", e.Name, err)
+		}
+		plaintexts[i] = pt
+		extraEnv[i] = fmt.Sprintf("%s=%s", e.Name, string(pt))
+	}
+	return extraEnv, plaintexts, nil
 }
 
 func toSet(keys []string) map[string]struct{} {

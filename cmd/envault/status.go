@@ -34,7 +34,10 @@ func newStatusCmd() *cobra.Command {
 	}
 }
 
-func runStatus(repoRoot string) error {
+// computeStatus builds a statusResult from the vault, git hook, and Privacy
+// Shield state. Read-only, no output — shared by runStatus and the MCP
+// envault_status tool.
+func computeStatus(repoRoot string) statusResult {
 	res := statusResult{
 		Initialized: vault.IsInitialized(repoRoot),
 		GitHook:     hook.IsGitHookInstalled(repoRoot),
@@ -51,6 +54,11 @@ func runStatus(repoRoot string) error {
 			res.PrivacyShieldPatterns = len(patterns)
 		}
 	}
+	return res
+}
+
+func runStatus(repoRoot string) error {
+	res := computeStatus(repoRoot)
 
 	if ui.AgentMode {
 		ui.JSONResult(res)
