@@ -292,7 +292,9 @@ install from signed cross-platform releases.
 | v0.9.2 — Claude Code plugin & marketplace distribution | ✅ shipped |
 | v0.9.3 — Embedded MCP server (Claude Code native protocol) | ✅ shipped |
 | v0.9.4 — Key-unlock agent (ssh-agent-style, passphrase-free Claude Code UX) | ✅ shipped |
-| v0.10.0 — Integration testing (Gitea) | 🔜 next |
+| v0.9.5 — Integration testing (Gitea) | 🔜 next |
+| v0.9.6 — Security hardening & coverage | planned |
+| v0.9.7 — Custom Git merge driver & disaster recovery | planned |
 | v1.0.0 — Stable release | planned |
 
 ---
