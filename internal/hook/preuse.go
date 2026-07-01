@@ -105,6 +105,20 @@ func RunHookPreuse(r io.Reader, w io.Writer) error {
 		return ErrBlockToolCall
 	}
 
+	// envault add / set without --force: sealing a new value this way
+	// requires the plaintext to already be embedded in the Bash command
+	// (there is no interactive stdin over a tool call), which is exactly
+	// the exposure this hook exists to prevent.
+	if IsSensitiveEnvaultWriteCmd(cmd) {
+		_, _ = fmt.Fprintln(w,
+			"envault: sealing a secret via Bash is blocked — the plaintext would have to be\n"+
+				"embedded in this command, putting it in the model's context. Ask the user to\n"+
+				"run `envault add <KEY>` / `envault set <KEY>` themselves in their own terminal.\n"+
+				"If you really need to do this here anyway, pass --force to override.",
+		)
+		return ErrBlockToolCall
+	}
+
 	return nil
 }
 
@@ -112,38 +126,56 @@ func RunHookPreuse(r io.Reader, w io.Writer) error {
 // `envault export` as the primary command (not as an argument to another tool)
 // without the --force override flag.
 func IsSensitiveEnvaultCmd(cmd string) bool {
-	fields := strings.Fields(cmd)
+	return envaultSubcommandIs(cmd, "cat", "export")
+}
 
-	// Skip leading VAR=value environment assignments (e.g. CLAUDE_CODE=1 envault …)
-	start := 0
-	for start < len(fields) && strings.ContainsRune(fields[start], '=') {
-		start++
-	}
+// IsSensitiveEnvaultWriteCmd reports whether cmd invokes `envault add` or
+// `envault set` as the primary command without the --force override flag.
+// Unlike a plain read, sealing a value this way requires the plaintext to
+// already be embedded in the command text (no interactive stdin over a tool
+// call), so it is blocked the same way as a direct plaintext read.
+func IsSensitiveEnvaultWriteCmd(cmd string) bool {
+	return envaultSubcommandIs(cmd, "add", "set")
+}
 
-	if start >= len(fields) {
-		return false
-	}
-
-	first := fields[start]
-	if first != "envault" && !strings.HasSuffix(first, "/envault") {
-		return false
-	}
-
-	if start+1 >= len(fields) {
-		return false
-	}
-	sub := fields[start+1]
-	if sub != "cat" && sub != "export" {
-		return false
-	}
-
-	// Allow explicit --force override anywhere after the subcommand.
-	for _, flag := range fields[start:] {
+// envaultSubcommandIs reports whether cmd invokes envault with one of subs as
+// its subcommand, as either the whole command or any stage of a pipeline
+// (e.g. `echo value | envault add KEY` — the realistic way to feed a value
+// non-interactively), without an explicit --force override anywhere in cmd.
+func envaultSubcommandIs(cmd string, subs ...string) bool {
+	for _, flag := range strings.Fields(cmd) {
 		if flag == "--force" {
 			return false
 		}
 	}
-	return true
+
+	for _, segment := range strings.Split(cmd, "|") {
+		fields := strings.Fields(segment)
+
+		// Skip leading VAR=value environment assignments (e.g. CLAUDE_CODE=1 envault …)
+		start := 0
+		for start < len(fields) && strings.ContainsRune(fields[start], '=') {
+			start++
+		}
+		if start >= len(fields) {
+			continue
+		}
+
+		first := fields[start]
+		if first != "envault" && !strings.HasSuffix(first, "/envault") {
+			continue
+		}
+		if start+1 >= len(fields) {
+			continue
+		}
+		sub := fields[start+1]
+		for _, s := range subs {
+			if sub == s {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // IsEnvaultDir returns true when .envault/ exists under root.

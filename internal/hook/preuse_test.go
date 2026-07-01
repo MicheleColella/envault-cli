@@ -177,3 +177,86 @@ func TestIsSensitiveEnvaultCmd(t *testing.T) {
 		}
 	}
 }
+
+// ---- IsSensitiveEnvaultWriteCmd --------------------------------------------
+
+func TestIsSensitiveEnvaultWriteCmd(t *testing.T) {
+	sensitive := []string{
+		`echo "sk-live-123" | envault add API_KEY`,
+		"./envault add DB_URL",
+		"envault set DB_URL <<< value",
+		"/usr/local/bin/envault add KEY",
+	}
+	notSensitive := []string{
+		`echo "sk-live-123" | envault add API_KEY --force`,
+		"envault cat DB_URL", // read, not write — handled by IsSensitiveEnvaultCmd
+		"envault list",
+		"envault run -- npm start",
+		"npm install",
+		"echo envault add", // envault is not a command here
+	}
+
+	for _, cmd := range sensitive {
+		if !IsSensitiveEnvaultWriteCmd(cmd) {
+			t.Errorf("expected %q to be a sensitive write, got false", cmd)
+		}
+	}
+	for _, cmd := range notSensitive {
+		if IsSensitiveEnvaultWriteCmd(cmd) {
+			t.Errorf("expected %q to NOT be a sensitive write, got true", cmd)
+		}
+	}
+}
+
+func TestRunHookPreuse_BlocksEnvaultAddSet(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, ".envault"), 0o700)
+
+	origWd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	for _, cmd := range []string{
+		`echo "sk-live-123" | envault add API_KEY`,
+		"envault set DB_URL <<< newvalue",
+	} {
+		input := map[string]interface{}{
+			"tool_name":  "Bash",
+			"tool_input": map[string]interface{}{"command": cmd},
+		}
+		b, _ := json.Marshal(input)
+		var w bytes.Buffer
+
+		err := RunHookPreuse(bytes.NewReader(b), &w)
+		if err == nil {
+			t.Errorf("cmd %q: expected ErrBlockToolCall, got nil", cmd)
+			continue
+		}
+		if !strings.Contains(w.String(), "own terminal") {
+			t.Errorf("cmd %q: block message should direct the user to their own terminal, got: %s", cmd, w.String())
+		}
+	}
+}
+
+func TestRunHookPreuse_AllowsAddWithForce(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, ".envault"), 0o700)
+
+	origWd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	input := map[string]interface{}{
+		"tool_name":  "Bash",
+		"tool_input": map[string]interface{}{"command": `echo "val" | envault add KEY --force`},
+	}
+	b, _ := json.Marshal(input)
+	var w bytes.Buffer
+
+	if err := RunHookPreuse(bytes.NewReader(b), &w); err != nil {
+		t.Fatalf("expected no error for add --force, got: %v", err)
+	}
+	if w.Len() != 0 {
+		t.Errorf("expected no output for add --force, got: %s", w.String())
+	}
+}

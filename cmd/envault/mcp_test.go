@@ -55,7 +55,7 @@ func callTool(t *testing.T, tools []mcp.Tool, name string, args string) (interfa
 func TestMCPTools_Registry(t *testing.T) {
 	tools := mcpTools(t.TempDir())
 	want := []string{
-		"envault_status", "envault_list", "envault_add", "envault_rotate",
+		"envault_status", "envault_list", "envault_rotate",
 		"envault_run", "envault_protect", "envault_push", "envault_pull",
 	}
 	if len(tools) != len(want) {
@@ -127,34 +127,17 @@ func TestMCPList_ReturnsEntries(t *testing.T) {
 	}
 }
 
-func TestMCPAdd_Success(t *testing.T) {
-	root := initVaultRoot(t)
-	addTestRecipient(t, root, "alice@example.com")
-	silenceUI(t)
-
-	tools := mcpTools(root)
-	result, err := callTool(t, tools, "envault_add", `{"name":"STRIPE_KEY","value":"sk_live_super_secret"}`)
-	if err != nil {
-		t.Fatalf("envault_add: %v", err)
-	}
-	summary := result.(entrySummary)
-	if !summary.OK || summary.Name != "STRIPE_KEY" || summary.Recipients != 1 {
-		t.Errorf("unexpected summary: %+v", summary)
-	}
-
-	// The plaintext value must never appear in the marshaled response.
-	b, _ := json.Marshal(summary)
-	if strings.Contains(string(b), "sk_live_super_secret") {
-		t.Errorf("secret plaintext leaked into tool response: %s", b)
-	}
-}
-
-func TestMCPAdd_EmptyName(t *testing.T) {
-	root := initVaultRoot(t)
-	tools := mcpTools(root)
-	_, err := callTool(t, tools, "envault_add", `{"name":"","value":"x"}`)
-	if err == nil {
-		t.Fatal("expected error for empty name")
+func TestMCPTools_AddNotExposed(t *testing.T) {
+	// envault_add would require Claude to construct the plaintext value as a
+	// tool argument — the same plaintext-exposure risk that already excludes
+	// cat/export/import/key * from the MCP surface. Sealing a brand-new
+	// secret must stay a terminal-only operation (see preuse.go's block on
+	// `envault add`/`envault set` via Bash).
+	tools := mcpTools(t.TempDir())
+	for _, tool := range tools {
+		if tool.Name == "envault_add" {
+			t.Fatal("envault_add must not be exposed as an MCP tool")
+		}
 	}
 }
 
@@ -403,7 +386,7 @@ func TestMCPServe_DryRunPrintsSchemas(t *testing.T) {
 	if unmarshalErr := json.Unmarshal(captured.Bytes(), &tools); unmarshalErr != nil {
 		t.Fatalf("output not a valid JSON array: %v — %q", unmarshalErr, captured.String())
 	}
-	if len(tools) != 8 {
-		t.Errorf("expected 8 tool schemas, got %d", len(tools))
+	if len(tools) != 7 {
+		t.Errorf("expected 7 tool schemas, got %d", len(tools))
 	}
 }

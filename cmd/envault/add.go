@@ -13,7 +13,7 @@ import (
 )
 
 func newAddCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "add <KEY>",
 		Short: "Add or update a single secret in the vault",
 		Long: "Seal a single secret for all current recipients.\n" +
@@ -32,6 +32,11 @@ func newAddCmd() *cobra.Command {
 			return runAdd(wd, args[0], value)
 		},
 	}
+	// ponytail: --force has no effect here; it exists only as the override
+	// token the Claude Code preuse hook looks for before letting an AI agent
+	// run this command via Bash (see internal/hook/preuse.go).
+	cmd.Flags().Bool("force", false, "acknowledge running this via an AI agent (the hook otherwise blocks it)")
+	return cmd
 }
 
 // readSecretValue reads a secret value from stdin (piped) or prompts

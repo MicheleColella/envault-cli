@@ -61,13 +61,15 @@ and a skill that teaches Claude the vault workflow, all enabled per-project
 (never globally by default).
 
 The MCP server (`envault mcp serve`) exposes typed, JSON-Schema-validated
-tools (`envault_status`, `envault_add`, `envault_list`, `envault_rotate`,
-`envault_run`, `envault_protect`, `envault_push`, `envault_pull`) so Claude
-calls Envault directly instead of constructing bash commands — there's no
-shell string to parse, so no shell-injection surface, and tool responses
-carry only metadata (name, algorithm, recipient count, timestamps), never a
-secret value. It runs headless, per Claude Code session, with no persistent
-daemon.
+tools (`envault_status`, `envault_list`, `envault_rotate`, `envault_run`,
+`envault_protect`, `envault_push`, `envault_pull`) so Claude calls Envault
+directly instead of constructing bash commands — there's no shell string to
+parse, so no shell-injection surface, and tool responses carry only metadata
+(name, algorithm, recipient count, timestamps), never a secret value. It runs
+headless, per Claude Code session, with no persistent daemon. Sealing a
+**new** secret (`add`/`set`) is deliberately not exposed to Claude at all,
+via MCP or bash — that requires a human to type it in their own terminal, or
+the plaintext would have to pass through the model's context first.
 
 ```text
 /plugin marketplace add MicheleColella/envault-cli

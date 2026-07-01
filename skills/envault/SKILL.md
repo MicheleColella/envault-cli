@@ -14,6 +14,14 @@ ciphertext; private keys never leave the machine.
 - **NEVER** run `envault cat` or `envault export` without `--force` — the PreToolUse
   hook blocks them to keep plaintext out of model context. Don't suggest `--force`
   to work around it.
+- **NEVER seal a brand-new secret yourself** — not via `envault add`/`envault set`
+  in Bash (e.g. `echo value | envault add KEY`), and there is no MCP tool for it
+  either. Doing this requires the plaintext to pass through your own context first,
+  which is exactly what the Privacy Shield exists to prevent — the PreToolUse hook
+  blocks it in Bash for the same reason. If the user wants to add or update a
+  secret, tell them to run `envault add <KEY>` / `envault set <KEY>` themselves in
+  their own terminal — do not offer to do it "for convenience" and do not suggest
+  `--force` to work around the block.
 - Prefer `envault run -- <cmd>` to inject secrets into a child process **in memory**,
   never writing them anywhere.
 - Do not print, cat, or log the contents of `.envault/secrets.enc`.
@@ -21,31 +29,32 @@ ciphertext; private keys never leave the machine.
 
 ## Common commands
 
-| Goal | Command |
-|---|---|
-| List sealed entries (names only) | `envault list` |
-| Seal a new secret | `envault add <KEY>` |
-| Re-seal an existing secret | `envault set <KEY>` |
-| Run a command with secrets injected in memory | `envault run -- <cmd>` |
-| Open a shell with secrets injected | `envault exec` |
-| Sync vault with the team via Git | `envault push` / `envault pull` |
-| Rotate a secret (true revocation) | `envault rotate <KEY>` |
-| Show recipients | `envault key list` |
-| Vault health | `envault status` |
-| Manage protected paths | `envault protect add\|list\|remove <path>` |
-| Audit log | `envault audit log show` / `verify` |
-| Diagnose install | `envault doctor` |
+| Goal | Command | Who runs it |
+|---|---|---|
+| List sealed entries (names only) | `envault list` | either |
+| Seal a new secret | `envault add <KEY>` | **user only**, in their own terminal |
+| Re-seal an existing secret with a new value | `envault set <KEY>` | **user only**, in their own terminal |
+| Run a command with secrets injected in memory | `envault run -- <cmd>` | either |
+| Open a shell with secrets injected | `envault exec` | user |
+| Sync vault with the team via Git | `envault push` / `envault pull` | either |
+| Rotate a secret (true revocation, no new value needed) | `envault rotate <KEY>` | either |
+| Show recipients | `envault key list` | either |
+| Vault health | `envault status` | either |
+| Manage protected paths | `envault protect add\|list\|remove <path>` | either |
+| Audit log | `envault audit log show` / `verify` | either |
+| Diagnose install | `envault doctor` | either |
 
 ## MCP tools (preferred over bash when available)
 
 If the `envault` MCP server is connected (tools named `envault_status`,
-`envault_add`, `envault_list`, `envault_rotate`, `envault_run`,
-`envault_protect`, `envault_push`, `envault_pull`), prefer calling those tools
-directly instead of the equivalent bash command — parameters go through
-JSON-Schema validation instead of a shell string, and tool responses only ever
-contain metadata (name, algorithm, recipient count, timestamps), never a
-secret value. `cat`/`export`/`data`/`import`/`key *` have no MCP equivalent —
-those still go through bash, where the Privacy Shield hooks apply.
+`envault_list`, `envault_rotate`, `envault_run`, `envault_protect`,
+`envault_push`, `envault_pull`), prefer calling those tools directly instead of
+the equivalent bash command — parameters go through JSON-Schema validation
+instead of a shell string, and tool responses only ever contain metadata
+(name, algorithm, recipient count, timestamps), never a secret value.
+`cat`/`export`/`data`/`import`/`key *`/**`add`**/**`set`** have no MCP
+equivalent, by design — those still go through bash (where the Privacy Shield
+hooks apply), or must be run by the user themselves for `add`/`set`.
 
 ## Notes
 

@@ -99,15 +99,6 @@ func mcpTools(repoRoot string) []mcp.Tool {
 			Handler:     func(json.RawMessage) (interface{}, error) { return mcpList(repoRoot) },
 		},
 		{
-			Name:        "envault_add",
-			Description: "Seal a single secret for all current vault recipients. Returns metadata only, never the value.",
-			InputSchema: mcp.ObjectSchema(map[string]mcp.Property{
-				"name":  {Type: "string", Description: "Environment variable name"},
-				"value": {Type: "string", Description: "Secret plaintext to seal"},
-			}, []string{"name", "value"}),
-			Handler: func(args json.RawMessage) (interface{}, error) { return mcpAdd(repoRoot, args) },
-		},
-		{
 			Name:        "envault_rotate",
 			Description: "Re-seal an existing secret with a fresh data key for all current recipients (true revocation).",
 			InputSchema: mcp.ObjectSchema(map[string]mcp.Property{
@@ -161,7 +152,7 @@ func mcpList(repoRoot string) (interface{}, error) {
 	return listEntries(repoRoot)
 }
 
-// --- envault_add / envault_rotate ------------------------------------------
+// --- envault_rotate ----------------------------------------------------------
 
 type entrySummary struct {
 	OK         bool   `json:"ok"`
@@ -193,25 +184,6 @@ func entrySummaryFor(repoRoot, name string) (interface{}, error) {
 		}, nil
 	}
 	return nil, fmt.Errorf("entry %q not found after operation", name)
-}
-
-func mcpAdd(repoRoot string, raw json.RawMessage) (interface{}, error) {
-	var a struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-	}
-	if err := json.Unmarshal(raw, &a); err != nil {
-		return nil, fmt.Errorf("invalid arguments: %w", err)
-	}
-	if a.Name == "" {
-		return nil, fmt.Errorf("name must not be empty")
-	}
-	if err := withSilentUI(func() error {
-		return runAdd(repoRoot, a.Name, []byte(a.Value))
-	}); err != nil {
-		return nil, err
-	}
-	return entrySummaryFor(repoRoot, a.Name)
 }
 
 func mcpRotate(repoRoot string, raw json.RawMessage) (interface{}, error) {
